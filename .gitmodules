@@ -1,3 +1,6 @@
 [submodule "SoulsFormats"]
 	path = SoulsFormats
-	url = https://github.com/AinTunez/SoulsFormats
+	url = https://github.com/soulsmods/SoulsFormatsNEXT
+[submodule "SoapstoneLib"]
+	path = SoapstoneLib
+	url = https://github.com/soulsmods/SoapstoneLib
