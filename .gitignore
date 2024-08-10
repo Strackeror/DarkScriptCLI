@@ -356,3 +356,7 @@ MigrationBackup/
 
 
 .vscode
+
+
+*.dcx
+oo2core*.dll

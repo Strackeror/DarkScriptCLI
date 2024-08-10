@@ -133,7 +133,7 @@ namespace DarkScript3
                             col = IndexOfNonWhiteSpace(line);
                         }
                         // In the editor, columns are 1-indexed.
-                        string prefix = $"{sourceLoc.Line}:{col+1}:";
+                        string prefix = $"{sourceLoc.Line}:{col + 1}:";
                         sb.AppendLine($"{prefix}{line}");
                         sb.AppendLine($"{new string(' ', prefix.Length + col)}^");
                     }
@@ -175,7 +175,7 @@ namespace DarkScript3
                 if (decorating)
                 {
                     // For every line: Pre (# of blank lines, arbitrary comments), post (post-comment)
-                    Scanner commentScanner = new Scanner(code, new ParserOptions { Comment = true });
+                    Scanner commentScanner = new Scanner(code, new ScannerOptions { Comments = true });
                     Token token;
                     do
                     {
@@ -234,7 +234,7 @@ namespace DarkScript3
 
             public static CompileError FromInstr(Intermediate im, string message, object ev)
             {
-                Position? loc = im?.LineMapping == null ? (Position?)null : new Position(im.LineMapping.SourceLine, 0);
+                Position? loc = im?.LineMapping == null ? (Position?)null : Position.From(im.LineMapping.SourceLine, 0);
                 return new CompileError
                 {
                     Loc = loc,
@@ -475,7 +475,7 @@ namespace DarkScript3
                 }
             }
 
-            public CondAssign ConvertAssign(Expression lhs, AssignmentOperator assignOp, Expression rhs)
+            public CondAssign ConvertAssign(Node lhs, AssignmentOperator assignOp, Expression rhs)
             {
                 CondAssign assign = new CondAssign();
                 if (lhs is Identifier id)
@@ -907,8 +907,8 @@ namespace DarkScript3
             Esprima.Ast.Program program;
             try
             {
-                JavaScriptParser parser = new JavaScriptParser(code, new ParserOptions { });
-                program = parser.ParseScript(false);
+                JavaScriptParser parser = new JavaScriptParser(new ParserOptions { });
+                program = parser.ParseScript(code, strict: false);
                 // "ERROR: <message>\n{line}:{col}: line"
             }
             catch (ParserException ex)
@@ -919,7 +919,7 @@ namespace DarkScript3
                     if (err.IsPositionDefined)
                     {
                         // These columns appear to be mostly 1-indexed, so change them to 0-indexed to match Node positions.
-                        pos = new Position(err.Position.Line, Math.Max(0, err.Position.Column - 1));
+                        pos = Position.From(err.Position.Line, Math.Max(0, err.Position.Column - 1));
                     }
                     context.Errors.Add(new CompileError { Line = err.LineNumber, Loc = pos, Message = err.Description });
                     SourceContext tempSource = SourceContext.FromText(code, decorating: false);

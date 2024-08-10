@@ -118,7 +118,7 @@ namespace DarkScript3
                 }
             }
         }
-        
+
         public bool IsVariableLength(EMEDF.InstrDoc doc)
         {
             if (ResourceString.StartsWith("ds2"))
@@ -144,13 +144,6 @@ namespace DarkScript3
             }
 
             ResourceString = Path.GetFileName(streamPath);
-
-#if DEBUG
-            if (ResourceString.StartsWith("ac6"))
-            {
-                new CondTestingTool().AddUnknownValues(DOC, "unkac6.csv");
-            }
-#endif
 
             Dictionary<string, List<string>> aliasesByEnum = new Dictionary<string, List<string>>();
             if (DOC.DarkScript?.EnumAliases != null)

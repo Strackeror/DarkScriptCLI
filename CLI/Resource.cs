@@ -12,7 +12,7 @@ namespace DarkScript3
     {
         public static string Text(string s)
         {
-            using (Stream stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("DarkScript3.Resources." + s))
+            using (Stream stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("CLI.Resources." + s))
             {
                 if (stream == null)
                 {
