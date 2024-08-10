@@ -361,3 +361,5 @@ MigrationBackup/
 *.dcx
 oo2core*.dll
 /*.js
+/*.ts
+/*.json

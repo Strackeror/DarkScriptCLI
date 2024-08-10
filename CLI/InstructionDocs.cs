@@ -33,8 +33,8 @@ namespace DarkScript3
         public Dictionary<string, int> EnumValues = new Dictionary<string, int>();
 
         // Callable objects by display name, both instructions and condition functions, for autocomplete/docbox purposes
-        public Dictionary<string, List<EMEDF.ArgDoc>> AllArgs = new Dictionary<string, List<EMEDF.ArgDoc>>();
 
+        public Dictionary<string, List<EMEDF.ArgDoc>> AllArgs = new Dictionary<string, List<EMEDF.ArgDoc>>();
         // Mapping from function names to their newer versions.
         // This is populated automatically for Speffect/SpEffect before ER, and based on extra emedf metadata otherwise.
         public Dictionary<string, string> DisplayAliases = new Dictionary<string, string>();

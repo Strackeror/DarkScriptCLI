@@ -13,6 +13,7 @@
 
   <ItemGroup>
     <EmbeddedResource Include="Resources\*.js" />
+    <EmbeddedResource Include="Resources\*.d.ts" />
     <EmbeddedResource Include="Resources\*.json" />
     <EmbeddedResource Include="Resources\*.txt" />
   </ItemGroup>

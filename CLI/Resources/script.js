@@ -91,6 +91,13 @@ function floatArg(num) {
     return Scripter.ConvertFloatToIntBytes(num);
 }
 
+function bytesArg(...nums) {
+    return nums[0]
+        + (nums[1] << 8)
+        + (nums[2] << 16)
+        + (nums[3] << 24)
+}
+
 class CodeBlock {
     instructions = [];
 
