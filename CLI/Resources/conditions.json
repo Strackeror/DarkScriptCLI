@@ -1203,7 +1203,7 @@
       "end": "1005[02]",
       "goto": "1005[101]",
       "negate_field": "Damage State",
-      "opt_fields": ["Comparison Type", "Number of Target Objects"],
+      "opt_fields": ["Comparison Type", "Number of Target Assets"],
       "as_bool": {
         "shortname": "AssetDestroyed",
         "true": "Destroyed"
@@ -1242,7 +1242,7 @@
       "games": ["er"],
       "category": "asset",
       "cond": "5[03]",
-      "opt_fields": ["Comparison Type", "Number of Target Objects"],
+      "opt_fields": ["Comparison Type", "Number of Target Assets"],
       "as_compare": {
         "shortname": "AssetHP",
         "rhs": "HP Threshold"
@@ -1274,7 +1274,7 @@
       "games": ["er"],
       "category": "asset",
       "cond": "5[09]",
-      "opt_fields": ["Comparison Type", "Number of Target Objects"],
+      "opt_fields": ["Comparison Type", "Number of Target Assets"],
       "as_compare": {
         "shortname": "AssetBurnState",
         "rhs": "Burn State (Unknown)"
@@ -1297,7 +1297,7 @@
       "category": "asset",
       "cond": "5[10]",
       "negate_field": "Is Backread",
-      "opt_fields": ["Comparison Type", "Number of Target Objects"],
+      "opt_fields": ["Comparison Type", "Number of Target Assets"],
       "as_bool": {
         "shortname": "AssetBackread"
       }

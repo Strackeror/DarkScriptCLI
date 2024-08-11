@@ -16,6 +16,7 @@ app.Configure(config =>
 
 app.Run(args);
 
+
 class CompileCommand : Command<CompileCommand.Settings>
 {
     public class Settings : CommandSettings
@@ -106,6 +107,91 @@ class DeclareCommand : Command<DeclareCommand.Settings>
         required public string FilePath { get; init; }
 
     }
+
+    public record struct Arg(EMEDF.ArgDoc doc, string name, bool optional);
+    public record struct Func(EMEDF.InstrDoc instr, string name, Arg[] args)
+    {
+        public Func Update(int skip = 0, int skipLast = 0, IEnumerable<string>? optionals = null, IEnumerable<string>? remove = null)
+        {
+            var optionalList = optionals?.ToList() ?? new();
+            var removedList = remove?.ToList() ?? new();
+            return this with
+            {
+                args = args
+                    .Skip(skip)
+                    .SkipLast(skipLast)
+                    .Reverse()
+                    .Where(arg =>
+                    {
+                        if (removedList.Remove(arg.doc.Name))
+                            return false;
+                        return true;
+                    })
+                    .Select(arg =>
+                    {
+                        if (optionalList.Remove(arg.doc.Name))
+                            return arg with { optional = true };
+                        return arg;
+                    })
+                    .Reverse()
+                    .ToArray()
+            };
+        }
+
+        string GetArgString(Arg arg)
+        {
+            var argDoc = arg.doc;
+            var name = arg.name;
+
+            var type = "number";
+            if (argDoc.EnumDoc is not null)
+                type = argDoc.EnumDoc.DisplayName;
+            if (argDoc.EnumName == "BOOL")
+                type = "boolean";
+            if (argDoc.Vararg)
+                return $"...{name}: {type}[]";
+            else if (arg.optional)
+                return $"{name}?: {type}";
+            else
+                return $"{name}: {type}";
+        }
+
+        public string Declare()
+        {
+            string argList = string.Join(", ", args.Select(GetArgString));
+            return $"declare function {name}({argList})";
+        }
+    }
+
+    Func GetFunc(EMEDF.InstrDoc instr)
+    {
+        HashSet<string> names = new();
+        var args = instr.Arguments.Select((arg, index) =>
+            {
+                var name = arg.DisplayName;
+                while (names.Contains(name)) name += "_";
+                names.Add(name);
+                return new Arg(arg, name, index >= instr.Arguments.Length - instr.OptionalArgs);
+            }
+        );
+        return new Func(instr, instr.DisplayName, args.ToArray());
+    }
+
+
+    (int cls, int index) ParseInstrIndex(string str)
+    {
+        var match = Regex.Match(str, @"(\d+)\[(\d+)\]");
+        if (!match.Success) throw new Exception($"Invalid instr {str}");
+        var cls = int.Parse(match.Groups[1].Value);
+        var index = int.Parse(match.Groups[2].Value);
+        return (cls, index);
+    }
+
+    EMEDF.InstrDoc? GetInstr(EMEDF doc, int cls, int index) =>
+        doc
+        .Classes.Find(c => c.Index == cls)?
+        .Instructions.Find(i => i.Index == index);
+
     public override int Execute(CommandContext context, Settings settings)
     {
         var options = new EventCFG.CFGOptions();
@@ -127,7 +213,8 @@ class DeclareCommand : Command<DeclareCommand.Settings>
             };
 
             writer.WriteLine($"declare enum {enum_.DisplayName} {{");
-            foreach (var (_, value) in enum_.Values) {
+            foreach (var (_, value) in enum_.Values)
+            {
                 string name = Regex.Replace(value, @"[^\w]", "");
                 writer.WriteLine($"{name},");
             }
@@ -139,43 +226,69 @@ class DeclareCommand : Command<DeclareCommand.Settings>
             writer.WriteLine("}");
         }
 
-        foreach (EMEDF.ClassDoc bank in DOC.Classes)
-        {
-            foreach (EMEDF.InstrDoc instr in bank.Instructions)
-            {
-                string funcName = instr.DisplayName;
+        foreach (var bank in DOC.Classes)
+            foreach (var instr in bank.Instructions)
+                writer.WriteLine(GetFunc(instr).Declare());
 
-                // TODO: Consider requiring all arg docs to be uniquely named in InstructionDocs.
-                List<string> args = new();
-                HashSet<string> argNames = new();
-
-                foreach (var (argDoc, index) in instr.Arguments.Select((a, i) => (a, i)))
-                {
-                    var name = argDoc.DisplayName;
-                    while (argNames.Contains(name)) name += "_";
-                    argNames.Add(name);
-
-                    var type = "number";
-                    if (argDoc.EnumDoc is not null)
-                        type = argDoc.EnumDoc.DisplayName;
-                    if (argDoc.EnumName == "BOOL")
-                        type = "boolean";
-                    if (argDoc.Vararg)
-                        args.Add($"...{name}: {type}[]");
-                    else if (index > instr.Arguments.Count() - instr.OptionalArgs)
-                        args.Add($"{name}?: {type}");
-                    else
-                        args.Add($"{name}: {type}");
-                }
-                string argList = string.Join(", ", args);
-                writer.WriteLine($"declare function {funcName}({argList});");
-            }
-
-        }
-        foreach (KeyValuePair<string, string> alias in docs.DisplayAliases)
+        foreach (var alias in docs.DisplayAliases)
         {
             writer.WriteLine($"declare const {alias.Key}: typeof {alias.Value};");
         }
+
+        writer.WriteLine("declare class Condition {}");
+        var conditionData = ConditionData.ReadStream("conditions.json");
+        foreach (var cond in conditionData.Conditions)
+        {
+            if (cond.Games is not null && !cond.Games.Contains("er")) continue;
+            if (cond.Cond is null) continue;
+
+            var (cls, index) = ParseInstrIndex(cond.Cond);
+            var instr = GetInstr(docs.DOC, cls, index);
+            if (instr is null) continue;
+
+            var func = GetFunc(instr).Update(1, 0, cond.OptFields ?? new(), [cond.NegateField ?? ""]) with { name = cond.Name };
+            writer.WriteLine(func.Declare());
+
+            foreach (var sbool in cond.AllBools)
+            {
+                var boolFunc = func with { name = sbool.Name };
+                if (sbool.Required is not null)
+                    boolFunc = boolFunc.Update(remove: sbool.Required.Select(r => r.Field));
+                writer.WriteLine(boolFunc.Declare() + ": Condition");
+            }
+        }
+
+        var shorts = conditionData.Shorts;
+        foreach (var @short in shorts)
+        {
+            if (@short.Games is not null && !@short.Games.Contains("er")) continue;
+
+            var (cls, index) = ParseInstrIndex(@short.Cmd);
+            var instr = GetInstr(docs.DOC, cls, index);
+            if (instr is null) continue;
+
+
+            var func = GetFunc(instr).Update(optionals: @short.OptFields);
+            if (@short.Shorts is not null)
+            {
+                foreach (var shortVersion in @short.Shorts)
+                {
+                    var shortfunc = func.Update(remove: shortVersion.Required.Select(r => r.Field)) with
+                    { name = shortVersion.Name };
+                    writer.WriteLine(shortfunc.Declare());
+                }
+            }
+
+
+            if (@short.Enable is not null)
+            {
+                var shortfunc = func.Update(skipLast: 1);
+                writer.WriteLine((shortfunc with { name = "Enable" + @short.Enable }).Declare());
+                writer.WriteLine((shortfunc with { name = "Disable" + @short.Enable }).Declare());
+            }
+        }
+
+
         writer.Write(Resource.Text("script.d.ts"));
         Console.WriteLine(writer.ToString());
         return 0;
