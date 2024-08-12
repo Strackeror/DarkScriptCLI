@@ -4,6 +4,7 @@ using System.Linq;
 using System.IO;
 using System.Text;
 using static SoulsFormats.EMEVD;
+using System.Security.Cryptography;
 
 namespace DarkScript3
 {
@@ -149,6 +150,50 @@ namespace DarkScript3
                 string funcSuffix = processDecorations(EndComments, SingleIndent);
                 writer.WriteLine($"}});{funcSuffix}");
             }
+            public void PrintJs(TextWriter writer)
+            {
+                writer.WriteLine($"let event{ID} = new EventC({ID}, {RestBehavior}, function({string.Join(", ", Params)}) {{");
+                void subprint(List<Intermediate> stmts, int indentCount)
+                {
+                    string indent = string.Join("", Enumerable.Repeat(SingleIndent, indentCount));
+                    foreach (var stmt in stmts)
+                    {
+                        if (stmt is Instr instr && instr.Name == "InitializeEvent")
+                        {
+                            var id = instr.Args[1];
+                            var slot = instr.Args[0];
+                            var rest = instr.Args.Skip(2);
+                            writer.WriteLine($"{indent}event{id}.Initialize({slot}, {ArgString(rest.ToList(), null)})");
+                        }
+                        else if (stmt is IfElse ifElse)
+                        {
+                            writer.WriteLine($"{indent}If ({ifElse.Cond.ToJs()}, () => {{");
+                            subprint(ifElse.True, indentCount + 1);
+
+                            var cur = ifElse;
+                            while (cur.False is [IfElse next])
+                            {
+                                writer.WriteLine($"{indent}}},");
+                                writer.WriteLine($"{indent}{cur.Cond.ToJs()}, () => {{");
+                                subprint(cur.False, indentCount + 1);
+                            }
+
+                            if (cur.False.Any())
+                            {
+                                writer.WriteLine($"{indent}}},");
+                                writer.WriteLine($"{indent}Else, () => {{");
+                            }
+                            writer.WriteLine($"{indent}}});");
+                        }
+                        else
+                        {
+                            writer.WriteLine($"{indent}{stmt.ToJs()}");
+                        }
+                    }
+                }
+                subprint(Body, 1);
+                writer.WriteLine($"}});");
+            }
         }
 
         // A list of reserved words, plus some basic info to show in the editor.
@@ -281,6 +326,8 @@ namespace DarkScript3
 
             public virtual StringTree GetStringTree() => StringTree.Of(this);
             public virtual bool IsMeta => false;
+            public virtual string ToJs() => ToString();
+
         }
 
         public class SourceDecoration
@@ -294,6 +341,7 @@ namespace DarkScript3
         public class NoOp : Intermediate
         {
             public override string ToString() => $"NoOp();";
+            public override string ToJs() => "";
         }
 
         private static string ArgString(List<object> args, object layer)
@@ -347,6 +395,7 @@ namespace DarkScript3
             public int Num { get; set; }
 
             public override string ToString() => $"L{Num}:";
+            public override string ToJs() => $"Label{Num}()";
         }
 
         public class JSStatement : Intermediate
@@ -400,7 +449,8 @@ namespace DarkScript3
         {
             // The condition this control statement is operating on
             public Cond Cond { get; set; }
-            protected string PlainCond {
+            protected string PlainCond
+            {
                 get
                 {
                     string c = Cond.ToString();
@@ -408,6 +458,7 @@ namespace DarkScript3
                     return c;
                 }
             }
+
             // In compilation, a hint for the command this should turn into
             // public string Cmd { get; set; }
 
@@ -426,6 +477,9 @@ namespace DarkScript3
             public override StringTree GetStringTree() => Cond.Always
                 ? StringTree.Of(this)
                 : StringTree.IsolatedStart($"{EndName}(", Cond.GetStringTree(true), ");");
+
+            public override string ToJs() => $"{EndName}({(Cond.Always ? "" : Cond.ToJs())})";
+
         }
 
         public class CondAssign : CondIntermediate
@@ -437,6 +491,13 @@ namespace DarkScript3
             public override ControlType ControlType => ControlType.COND;
             public override object ControlArg => ToCond;
             public override string ToString() => $"{ToVar ?? $"cond[{ToCond}]"} {StrAssign[Op]} {PlainCond};";
+            public override string ToJs() => Op switch
+            {
+                CondAssignOp.AssignAnd => $"{ToVar} = {ToVar}.And({Cond.ToJs()})",
+                CondAssignOp.AssignOr => $"{ToVar} = {ToVar}.Or({Cond.ToJs()})",
+                _ => $"var {ToVar} = {Cond.ToJs()}",
+            };
+
             public override StringTree GetStringTree() => StringTree.CombinedStart($"{ToVar} {StrAssign[Op]} ", Cond.GetStringTree(true), ";");
         }
 
@@ -446,6 +507,7 @@ namespace DarkScript3
             [CondAssignOp.AssignOr] = "|=",
             [CondAssignOp.AssignAnd] = "&=",
         };
+
         public enum CondAssignOp
         {
             Assign, AssignOr, AssignAnd
@@ -493,6 +555,15 @@ namespace DarkScript3
             public override string ToString() => Cond.Always
                 ? $"{(ToLabel == null ? (ToNode >= 0 ? $"GotoInternal({ToNode}" : $"SkipLines({SkipLines}") : $"Goto({ToLabel}")});"
                 : $"{(ToLabel == null ? (ToNode >= 0 ? $"GotoIfInternal({ToNode}" : $"SkipLinesIf({SkipLines}") : $"GotoIf({ToLabel}")}, {PlainCond});";
+            public override string ToJs()
+            {
+                var label = SkipLines >= 0 ? $"\"{ToLabel}\"" : ToLabel;
+                if (Cond.Always)
+                    return $"Goto({label})";
+                else
+                    return $"GotoIf({label}, {Cond.ToJs()})";
+            }
+
             public override StringTree GetStringTree() => Cond.Always
                 ? base.GetStringTree()
                 : StringTree.IsolatedStart($"GotoIf({ToLabel}, ", Cond.GetStringTree(true), ");");
@@ -524,6 +595,7 @@ namespace DarkScript3
             // Cond should always be a specific condition and not Always.
             public override string ToString() => $"WaitFor({PlainCond});";
             public override StringTree GetStringTree() => StringTree.IsolatedStart("WaitFor(", Cond.GetStringTree(true), ");");
+            public override string ToJs() => $"WaitFor({Cond.ToJs()})";
         }
 
         public abstract class Cond
@@ -533,6 +605,9 @@ namespace DarkScript3
             public bool Always => this is CmdCond cond && cond.Name == "Always";
             public abstract string DocName { get; }
             public virtual StringTree GetStringTree(bool stripParens = false) => StringTree.Of(this);
+
+            protected string Not => Negate ? ".Not()" : "";
+            public virtual string ToJs() => ToString();
 
             public static Cond ALWAYS = new CmdCond { Name = "Always" };
 
@@ -572,6 +647,28 @@ namespace DarkScript3
             public override string DocName => CmdLhs == null ? "Op" : CmdLhs.DocName;
             private string CompareOp => StrComparison[Negate ? OppositeComparison[Type] : Type];
             public override string ToString() => $"{(Lhs == null ? CmdLhs : Lhs)} {CompareOp} {Rhs}";
+
+            string JsOp(ComparisonType type) => type switch
+            {
+                ComparisonType.Equal => "Eq",
+                ComparisonType.NotEqual => "NEq",
+                ComparisonType.Greater => "Gt",
+                ComparisonType.GreaterOrEqual => "GtE",
+                ComparisonType.Less => "Lt",
+                ComparisonType.LessOrEqual => "LtE",
+                _ => throw new Exception(),
+            };
+
+            public override string ToJs()
+            {
+                var lhs = Lhs is null
+                    ? $"{CmdLhs.ToJs()}"
+                    : $"({Lhs})";
+                var op = Negate
+                    ? JsOp(Type)
+                    : JsOp(OppositeComparison[Type]);
+                return $"{lhs}.{op}({Rhs})";
+            }
         }
 
         public class CmdCond : Cond
@@ -581,6 +678,12 @@ namespace DarkScript3
 
             public override string DocName => Name;
             public override string ToString() => $"{Prefix}{Name}({ArgString(Args, null)})";
+            public override string ToJs()
+            {
+                var expr = $"{Name}({ArgString(Args, null)})";
+                if (Negate) expr = $"Not({expr})";
+                return expr;
+            }
         }
 
         public class CondRef : Cond
@@ -595,6 +698,7 @@ namespace DarkScript3
 
             public override string DocName => Compiled ? "CompiledConditionGroup" : "ConditionGroup";
             public override string ToString() => $"{Prefix}{Name ?? $"cond[{Group}]"}{(Compiled ? ".Passed" : "")}";
+            public override string ToJs() => $"{Name}";
         }
 
         public class OpCond : Cond
@@ -604,7 +708,9 @@ namespace DarkScript3
 
             public override string DocName => throw new Exception($"Internal error: no built-in command corresponding to {this}");
             private string CombineOp => And ? " && " : " || ";
+            private string CombineFunc => And ? ").And(" : ").Or(";
             public override string ToString() => $"{Prefix}({string.Join(CombineOp, Ops)})";
+            public override string ToJs() => $"({string.Join(CombineFunc, Ops.Select(o => o.ToJs()))})";
             public override StringTree GetStringTree(bool stripParens = false) => new StringTree
             {
                 Children = Ops.Select(c => c.GetStringTree()).ToList(),

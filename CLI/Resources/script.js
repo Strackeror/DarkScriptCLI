@@ -98,16 +98,18 @@ function bytesArg(...nums) {
         + (nums[3] << 24)
 }
 
-class CodeBlock {
-    instructions = [];
-
-    constructor(func) {
-        _codeblock = this;
-        func();
-        _codeblock = void 0;
+class EventC {
+    constructor(id, restBehavior, body) {
+        this.id = id;
+        Event(id, restBehavior, body);
     }
 
-    get length() { return this.instructions.length; }
+    /** 
+     * @param {number} slot 
+     * @param {number[]} args;
+     */
+    Initialize(slot, ...args) {
+        InitializeEvent(slot, this.id, ...args);
+    }
+};
 
-    Exec = () => this.instructions.forEach(ins => _Instruction(ins[0], ins[1], ins[2]));
-}

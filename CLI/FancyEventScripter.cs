@@ -28,7 +28,10 @@ namespace DarkScript3
         public string Unpack()
         {
             StringWriter writer = new StringWriter();
-            Decompile(writer);
+            foreach (var f in Decompile())
+            {
+                f.Print(writer);
+            }
             return writer.ToString();
         }
 
@@ -68,8 +71,9 @@ namespace DarkScript3
             return output.GetDiffSegments();
         }
 
-        private void Decompile(TextWriter writer)
+        public EventFunction[] Decompile()
         {
+            var ret = new List<EventFunction> { };
             EMEDF DOC = docs.DOC;
             InstructionTranslator info = docs.Translator;
             for (int i = 0; i < scripter.EVD.Events.Count; i++)
@@ -85,8 +89,6 @@ namespace DarkScript3
                 EventFunction func = new EventFunction { ID = (int)evt.ID, RestBehavior = evt.RestBehavior, Params = argNameList };
 
                 string eventName = scripter.EventName(evt.ID);
-                if (eventName != null) writer.WriteLine($"// {eventName}");
-
                 for (int insIndex = 0; insIndex < evt.Instructions.Count; insIndex++)
                 {
                     Instruction ins = evt.Instructions[insIndex];
@@ -129,6 +131,7 @@ namespace DarkScript3
                     // This returns warnings, many of which exist in vanilla emevd.
                     // Ignored until we have a nice way to show them.
                     f.Decompile(func, info);
+
                 }
                 catch (FancyNotSupportedException)
                 {
@@ -136,7 +139,6 @@ namespace DarkScript3
                     // Can find a way to expose the error, but these are basically intentional bail outs, also existing in vanilla emevd.
                     StringBuilder code = new StringBuilder();
                     scripter.UnpackEvent(evt, code);
-                    writer.Write(code.ToString());
                     continue;
                 }
                 catch (Exception ex)
@@ -146,9 +148,9 @@ namespace DarkScript3
                     sb.AppendLine(ex.ToString());
                     throw new Exception(sb.ToString());
                 }
-                func.Print(writer);
-                writer.WriteLine();
+                ret.Add(func);
             }
+            return ret.ToArray();
         }
     }
 }

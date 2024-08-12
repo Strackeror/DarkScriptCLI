@@ -4,6 +4,7 @@ using System.Text.RegularExpressions;
 using DarkScript3;
 using SoulsFormats;
 using Spectre.Console.Cli;
+using static SoulsFormats.EMEVD.Instruction;
 
 var app = new CommandApp();
 app.Configure(config =>
@@ -53,6 +54,17 @@ class DecompileCommand : Command<DecompileCommand.Settings>
         public bool NoFancy { get; init; }
     }
 
+    public string Unpack(FancyEventScripter scripter, InstructionDocs docs)
+    {
+        var writer = new StringWriter();
+        foreach (var func in scripter.Decompile())
+        {
+            func.PrintJs(writer);
+            writer.WriteLine();
+        }
+        return writer.ToString();
+    }
+
     public override int Execute(CommandContext context, Settings settings)
     {
         var options = new EventCFG.CFGOptions();
@@ -60,8 +72,8 @@ class DecompileCommand : Command<DecompileCommand.Settings>
         var eventScripter = new EventScripter(settings.FilePath, docs);
         var fancyScripter = new FancyEventScripter(eventScripter, docs, options);
         var decompiled = settings.NoFancy
-            ? eventScripter.Unpack()
-            : fancyScripter.Unpack();
+            ? fancyScripter.Unpack()
+            : Unpack(fancyScripter, docs);
         if (settings.OutputPath is not null)
             File.WriteAllText(settings.OutputPath, decompiled);
         else
@@ -147,7 +159,7 @@ class DeclareCommand : Command<DeclareCommand.Settings>
             if (argDoc.EnumDoc is not null)
                 type = argDoc.EnumDoc.DisplayName;
             if (argDoc.EnumName == "BOOL")
-                type = "boolean";
+                type = "boolean | 0 | 1";
             if (argDoc.Vararg)
                 return $"...{name}: {type}[]";
             else if (arg.optional)
@@ -187,10 +199,12 @@ class DeclareCommand : Command<DeclareCommand.Settings>
         return (cls, index);
     }
 
-    EMEDF.InstrDoc? GetInstr(EMEDF doc, int cls, int index) =>
-        doc
-        .Classes.Find(c => c.Index == cls)?
-        .Instructions.Find(i => i.Index == index);
+    EMEDF.InstrDoc? GetInstr(EMEDF doc, string? str)
+    {
+        if (str is null) return null;
+        var (cls, index) = ParseInstrIndex(str);
+        return doc[cls]?[index];
+    }
 
     public override int Execute(CommandContext context, Settings settings)
     {
@@ -235,26 +249,44 @@ class DeclareCommand : Command<DeclareCommand.Settings>
             writer.WriteLine($"declare const {alias.Key}: typeof {alias.Value};");
         }
 
-        writer.WriteLine("declare class Condition {}");
         var conditionData = ConditionData.ReadStream("conditions.json");
+        writer.WriteLine("// Conditions\n");
         foreach (var cond in conditionData.Conditions)
         {
             if (cond.Games is not null && !cond.Games.Contains("er")) continue;
-            if (cond.Cond is null) continue;
 
-            var (cls, index) = ParseInstrIndex(cond.Cond);
-            var instr = GetInstr(docs.DOC, cls, index);
-            if (instr is null) continue;
 
-            var func = GetFunc(instr).Update(1, 0, cond.OptFields ?? new(), [cond.NegateField ?? ""]) with { name = cond.Name };
-            writer.WriteLine(func.Declare());
+            Func func;
+            if (GetInstr(docs.DOC, cond.Cond) is var condI and not null)
+                func = GetFunc(condI).Update(skip: 1);
+            else if (GetInstr(docs.DOC, cond.Skip) is var skipI and not null)
+                func = GetFunc(skipI).Update(skip: 1);
+            else if (GetInstr(docs.DOC, cond.Goto) is var gotoI and not null)
+                func = GetFunc(gotoI).Update(skip: 1);
+            else
+                continue;
 
-            foreach (var sbool in cond.AllBools)
+            func = func.Update(optionals: cond.OptFields ?? new(), remove: [cond.NegateField ?? ""]) with
+            { name = cond.Name };
+
+            writer.WriteLine(func.Declare() + ": Condition");
+            foreach (var @bool in cond.AllBools)
             {
-                var boolFunc = func with { name = sbool.Name };
-                if (sbool.Required is not null)
-                    boolFunc = boolFunc.Update(remove: sbool.Required.Select(r => r.Field));
+                var boolFunc = func with { name = @bool.Name };
+                if (@bool.Required is not null)
+                    boolFunc = boolFunc.Update(remove: @bool.Required.Select(r => r.Field));
                 writer.WriteLine(boolFunc.Declare() + ": Condition");
+            }
+
+            foreach (var compare in cond.AllCompares)
+            {
+                var compFunc = func
+                    .Update(remove: cond.OptFields)
+                    .Update(remove: ["Comparison Type"])
+                    .Update(remove: [compare.Rhs])
+                    with
+                { name = compare.Name };
+                writer.WriteLine(compFunc.Declare() + ": Comparison");
             }
         }
 
@@ -263,8 +295,7 @@ class DeclareCommand : Command<DeclareCommand.Settings>
         {
             if (@short.Games is not null && !@short.Games.Contains("er")) continue;
 
-            var (cls, index) = ParseInstrIndex(@short.Cmd);
-            var instr = GetInstr(docs.DOC, cls, index);
+            var instr = GetInstr(docs.DOC, @short.Cmd);
             if (instr is null) continue;
 
 
@@ -286,11 +317,18 @@ class DeclareCommand : Command<DeclareCommand.Settings>
                 writer.WriteLine((shortfunc with { name = "Enable" + @short.Enable }).Declare());
                 writer.WriteLine((shortfunc with { name = "Disable" + @short.Enable }).Declare());
             }
+
         }
 
-
         writer.Write(Resource.Text("script.d.ts"));
-        Console.WriteLine(writer.ToString());
+        if (settings.FilePath is not null)
+        {
+            File.WriteAllText(settings.FilePath, writer.ToString());
+        }
+        else
+        {
+            Console.WriteLine(writer.ToString());
+        }
         return 0;
     }
 }

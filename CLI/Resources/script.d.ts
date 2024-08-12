@@ -3,14 +3,77 @@ declare const Restart: Behavior;
 declare const End: Behavior;
 declare const Default: Behavior;
 
+declare type Body = (...any: any[]) => void;
 declare type ONOFF = typeof ON | typeof OFF;
 
-declare function Event(id: number, behavior: Behavior, func: (...any: any[]) => void);
-declare function $Event(id: number, behavior: Behavior, func: (...any: any[]) => void);
+declare function Event(id: number, behavior: Behavior, func: Body);
+declare function $Event(id: number, behavior: Behavior, func: Body);
 declare function EndEvent();
 declare function RestartEvent();
+declare function RestartIf(cond: Condition);
 declare function EndIf(cond: Condition);
-declare function Goto(label: Label);
-declare function GotoIf(label: Label, cond: Condition);
+declare function Goto(label: Label | string);
+declare function GotoIf(label: Label | string, cond: Condition);
 declare function WaitFor(cond: Condition);
 declare function NoOp();
+declare function Skip(name: string);
+
+declare const Else: Condition;
+declare const mainGroupAbuse: Condition;
+
+type Alternating<A, B> = [A, B, A?, B?, A?, B?, A?, B?, A?, B?];
+type IfArgs = Alternating<Condition, () => void>;
+
+declare function If(...args: IfArgs);
+
+declare class EventC {
+  constructor(id: number, behavior: Behavior, func: Body);
+  Initialize(slot: number, ...args: number[]);
+}
+
+declare class Condition {
+  And(cond: Condition): Condition;
+  Or(cond: Condition): Condition;
+  Not(): Condition;
+}
+declare function Not(cond: Condition): Condition;
+
+declare class Comparison {
+  Eq(comp: Comparison | number): Condition;
+  NEq(comp: Comparison | number): Condition;
+  Gt(comp: Comparison | number): Condition;
+  GtE(comp: Comparison | number): Condition;
+  Lt(comp: Comparison | number): Condition;
+  LtE(comp: Comparison | number): Condition;
+}
+
+declare interface Number {
+  Eq(comp: Comparison | number): Condition;
+  NEq(comp: Comparison | number): Condition;
+  Gt(comp: Comparison | number): Condition;
+  GtE(comp: Comparison | number): Condition;
+  Lt(comp: Comparison | number): Condition;
+  LtE(comp: Comparison | number): Condition;
+}
+
+declare const L0: Label;
+declare const L1: Label;
+declare const L2: Label;
+declare const L3: Label;
+declare const L4: Label;
+declare const L5: Label;
+declare const L6: Label;
+declare const L7: Label;
+declare const L8: Label;
+declare const L9: Label;
+declare const L10: Label;
+declare const L11: Label;
+declare const L12: Label;
+declare const L13: Label;
+declare const L14: Label;
+declare const L15: Label;
+declare const L16: Label;
+declare const L17: Label;
+declare const L18: Label;
+declare const L19: Label;
+declare const L20: Label;
