@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Text;
 using System.Text.RegularExpressions;
 using Microsoft.ClearScript;
@@ -136,7 +137,7 @@ namespace DarkScript3
                 CurrentEventID = -1;
                 CurrentInsIndex = -1;
                 return ins;
-            } 
+            }
             catch (Exception ex)
             {
                 StringBuilder sb = new StringBuilder();
@@ -208,71 +209,10 @@ namespace DarkScript3
             v8.AddHostType("Console", typeof(Console));
             v8.Execute(Resource.Text("script.js"));
 
-            StringBuilder code = new StringBuilder();
-            foreach (KeyValuePair<string, int> pair in docs.GlobalEnumConstants)
-            {
-                code.AppendLine($"const {pair.Key} = {pair.Value};");
-            }
-            EMEDF DOC = docs.DOC;
-            foreach (EMEDF.EnumDoc enm in DOC.Enums)
-            {
-                if (docs.EnumNamesForGlobalization.Contains(enm.Name)) continue;
-                if (enm.Name == "BOOL") continue;
-                HashSet<string> vals = new HashSet<string>();
-                code.AppendLine($"const {enm.DisplayName} = {{");
-                foreach (KeyValuePair<string, string> pair in enm.Values)
-                {
-                    string valName = Regex.Replace(pair.Value, @"[^\w]", "");
-                    if (vals.Contains(valName)) throw new Exception($"Internal error: enum {enm.DisplayName} has duplicate value names {valName}");
-                    vals.Add(valName);
-                    code.AppendLine($"{valName}: {pair.Key},");
-                }
-                if (enm.ExtraValues != null)
-                {
-                    foreach (KeyValuePair<string, int> pair in enm.ExtraValues)
-                    {
-                        code.AppendLine($"{pair.Key}: {pair.Value},");
-                    }
-                }
-                code.AppendLine("};");
-            }
-
-            foreach (EMEDF.ClassDoc bank in DOC.Classes)
-            {
-                foreach (EMEDF.InstrDoc instr in bank.Instructions)
-                {
-                    string funcName = instr.DisplayName;
-
-                    // TODO: Consider requiring all arg docs to be uniquely named in InstructionDocs.
-                    List<string> args = new List<string>();
-                    foreach (EMEDF.ArgDoc argDoc in instr.Arguments)
-                    {
-                        string name = argDoc.DisplayName;
-                        while (args.Contains(name))
-                        {
-                            name += "_";
-                        }
-                        args.Add(name);
-                    }
-                    string argNames = string.Join(", ", args);
-
-                    code.AppendLine($"function {funcName} ({argNames}) {{");
-                    code.AppendLine($@"   Scripter.CurrentInsName = ""{funcName}"";");
-                    foreach (var arg in args)
-                    {
-                        code.AppendLine($"    if ({arg} === void 0)");
-                        code.AppendLine($@"           throw '!!! Argument \""{arg}\"" in instruction \""{funcName}\"" is undefined or missing.';");
-                    }
-                    code.AppendLine($@"  var ins = _Instruction({bank.Index}, {instr.Index}, Array.from(arguments));");
-                    code.AppendLine("    Scripter.CurrentInsName = \"\";");
-                    code.AppendLine("    return ins;");
-                    code.AppendLine("}");
-                }
-            }
-            foreach (KeyValuePair<string, string> alias in docs.DisplayAliases)
-            {
-                code.AppendLine($"const {alias.Key} = {alias.Value};");
-            }
+            var code = JsContextGen.GenerateContextJs(docs, ConditionData.ReadStream("conditions.json"));
+#if DEBUG
+            File.WriteAllText(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location) + "\\script.generated.js", code);
+#endif
             try
             {
                 v8.Execute(code.ToString());
@@ -303,6 +243,7 @@ namespace DarkScript3
             {
                 DocumentInfo docInfo = new DocumentInfo(documentName) { Category = ModuleCategory.Standard };
                 v8.Execute(docInfo, code);
+                v8.Execute("LoadAllEvents();");
             }
             catch (Exception ex) when (ex is IScriptEngineException scriptException)
             {

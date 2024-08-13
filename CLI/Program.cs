@@ -13,10 +13,12 @@ app.Configure(config =>
         config.AddCommand<DecompileCommand>("decompile");
         config.AddCommand<PreviewCommand>("preview");
         config.AddCommand<DeclareCommand>("declare");
+        config.SetExceptionHandler((exception, _) => {
+            Console.WriteLine(exception.ToString());
+        });
     });
 
 app.Run(args);
-
 
 class CompileCommand : Command<CompileCommand.Settings>
 {
@@ -99,7 +101,8 @@ class PreviewCommand : Command<PreviewCommand.Settings>
         var docs = new InstructionDocs("er-common.emedf.json");
         var eventScripter = new EventScripter("dummy.emevd.dcx", docs, new EMEVD(EMEVD.Game.Sekiro));
         var fancyEventScripter = new FancyEventScripter(eventScripter, docs, options);
-        fancyEventScripter.Pack(File.ReadAllText(settings.FilePath), settings.FilePath);
+        eventScripter.Pack(File.ReadAllText(settings.FilePath), settings.FilePath);
+
         if (!settings.NoFancy)
         {
             Console.Write(fancyEventScripter.Unpack());
@@ -320,7 +323,7 @@ class DeclareCommand : Command<DeclareCommand.Settings>
 
         }
 
-        writer.Write(Resource.Text("script.d.ts"));
+        writer.Write(Resource.Text("declarations.d.ts"));
         if (settings.FilePath is not null)
         {
             File.WriteAllText(settings.FilePath, writer.ToString());
