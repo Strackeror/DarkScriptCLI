@@ -2,37 +2,49 @@ const Default = REST.Default;
 const End = REST.End;
 const Restart = REST.Restart;
 
-var _event = void 0;
-var _codeblock = void 0;
-var _skips = void 0;
-var _skipIds = 0;
-var _labels;
+class EventContext {
+  /** @type {number} */ nextSkipId;
+  /** @type {number[]} */ skips;
+  /** @type {number[]} */ labels;
+  /** @type {EVENT} */ event;
 
+  /** @param {EVENT} event  */
+  constructor(event) {
+    this.nextSkipId = 0;
+    this.skips = [];
+    this.labels = [];
+    this.event = event;
+  }
+}
+/** @type {EventContext[]} */
+let _eventStack = [];
+/** @returns {EventContext} */
+function _Event() {
+  return _eventStack.at(-1);
+}
+
+/** @type {(id: number, restBehavior: number, instructions: any) => EVENT} */
 function Event(id, restBehavior, instructions) {
-  var evt = new EVENT();
+  let evt = new EVENT();
   evt.ID = id;
   evt.RestBehavior = restBehavior;
+  _eventStack.push(new EventContext(evt));
 
-  _labels = {};
-  _skips = {};
-  _skipIds = 0;
-  _event = evt;
   instructions.apply(this, _GetArgs(instructions));
-  if (_skips.length > 0) {
+
+  let skips = _Event().skips;
+  if (skips.length > 0) {
+    let unfilledSkips = JSON.stringify(skips);
     throw new Error(
-      `Reserved skips in Event ${id} have not been filled. Unfilled skips: ${JSON.stringify(
-        _skips
-      )}`
+      `Reserved skips in Event ${id} have not been filled. Unfilled skips: ${unfilledSkips}`
     );
   }
-  _event = void 0;
-  _skips = void 0;
-  _labels = void 0;
 
   EVD.Events.Add(evt);
   return evt;
 }
 
+/** @type {(func: (...any: any[]) => any) => string[]} */
 function _GetArgs(func) {
   var start = func.toString().indexOf("(");
   var end = func.toString().indexOf(")");
@@ -44,14 +56,10 @@ function _GetArgs(func) {
   return args.split(/\s*,\s*/).map((arg) => arg);
 }
 
+/** @type {(bank: number, index: number, args: any[]) => unknown} */
 function _Instruction(bank, index, args) {
-  if (_codeblock) {
-    _codeblock.instructions.push(Array.from(arguments));
-    return;
-  }
-
-  if (_event) {
-    var layer = void 0;
+  if (_Event()) {
+    let layer = undefined;
     if (args.length) {
       var lastArg = args.pop();
       if (lastArg.layerValue) {
@@ -63,31 +71,39 @@ function _Instruction(bank, index, args) {
 
     if (layer) {
       return Scripter.MakeInstruction(
-        _event,
+        _Event().event,
         bank,
         index,
         layer,
         hostArray(args)
       );
     } else {
-      return Scripter.MakeInstruction(_event, bank, index, hostArray(args));
+      return Scripter.MakeInstruction(
+        _Event().event,
+        bank,
+        index,
+        hostArray(args)
+      );
     }
   }
 }
 
 function _ReserveSkip() {
-  var id = _skipIds++;
-  _skips[id] = _event.Instructions.Count;
+  var id = _Event().nextSkipId++;
+  _Event().skips[id] = _Event().event.Instructions.Count;
   // Arbitrary, but checked later as a loose failsafe
   return id;
 }
 
+/** @type {(id: number) => void} */
 function _FillSkip(id) {
-  var index = id in _skips ? _skips[id] : -1;
-  delete _skips[id];
-  Scripter.FillSkipPlaceholder(_event, index);
+  var skips = _Event().skips;
+  var index = id in skips ? skips[id] : -1;
+  delete _Event().skips[id];
+  Scripter.FillSkipPlaceholder(_Event().event, index);
 }
 
+/** @type {(args: any[]) => any[]} */
 function hostArray(args) {
   var argOut = $$$_host.newArr(args.length);
   for (var i = 0; i < args.length; i++) {
@@ -96,17 +112,18 @@ function hostArray(args) {
   return argOut;
 }
 
-function $LAYERS(...args) {
-  var layer = 0;
-  for (var i = 0; i < args.length; i++) layer |= 1 << args[i];
-  return { layerValue: layer };
-}
+// function $LAYERS(...args) {
+//   var layer = 0;
+//   for (var i = 0; i < args.length; i++) layer |= 1 << args[i];
+//   return { layerValue: layer };
+// }
 
-// Utility function
+/** @type {(num: number) => number} */
 function floatArg(num) {
   return Scripter.ConvertFloatToIntBytes(num);
 }
 
+/** @type {(...nums: number[]) => number} */
 function bytesArg(...nums) {
   return nums[0] + (nums[1] << 8) + (nums[2] << 16) + (nums[3] << 24);
 }
@@ -115,6 +132,11 @@ function bytesArg(...nums) {
 var eventCs = [];
 
 class EventC {
+  /**
+   * @param {number} id
+   * @param {number} restBehavior
+   * @param {(...args: number[]) => void} body
+   */
   constructor(id, restBehavior, body) {
     this.id = id;
     this.behavior = restBehavior;
@@ -142,21 +164,32 @@ function LoadAllEvents() {
 }
 
 class ConditionType {
+  /**
+   * @param {IfFunc} cond
+   * @param {SkipFunc} skip
+   * @param {Endfunc} end
+   * @param {GotoFunc} goto
+   * @param {Wait} wait
+   */
   constructor(cond, skip, end, goto, wait) {
-    /** @type {(cond: number, ...args: any[]) => void} */
+    /** @type {IfFunc} */
     this.If = cond;
-    /** @type {(lines: number, ...args: any[]) => void} */
+    /** @type {SkipFunc} */
     this.Skip = skip;
-    /** @type {(end: EventEndType, ...args: any[]) => void} */
+    /** @type {Endfunc} */
     this.End = end;
-    /** @type {(label: Label, ...args: any[]) => void} */
+    /** @type {GotoFunc} */
     this.Goto = goto;
-    /** @type {(...args: any[]) => void} */
+    /** @type {Wait} */
     this.Wait = wait;
   }
 }
 
 class Condition {
+  /**
+   * @param {ConditionType} type
+   * @param  {...any} args
+   */
   constructor(type, ...args) {
     /** @type {ConditionType} */
     this.type = type;
@@ -192,13 +225,20 @@ function RestartEvent() {
   RestartIf(Always());
 }
 
+/** @typedef {() => void} Body */
+/** @type {(...args: [Condition, Body, ...any[]]) => void} */
 function If(...args) {
   /** @type {Condition} */
   let condition;
   /** @type {() => void} */
   let body;
+  /** @type {number[]} */
+  let skipIds = [];
+  /** @type {any[]} */
+  let rest = args;
+
   while (args.length > 2) {
-    [condition, body, ...args] = args;
+    [condition, body, ...rest] = rest;
     let skipFunc = condition.type.Skip;
     if (skipFunc === null)
       throw new Error(`No if function for condition ${condition}`);

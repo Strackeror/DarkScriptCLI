@@ -3,7 +3,9 @@
   "compilerOptions": {
     "lib": ["ESNext"],
     "checkJs": true,
-    "outFile": ""
+    "outFile": "",
+    "noImplicitAny": true,
+    
   },
   "include": ["./script.js", "./script.context.d.ts"]
 }
