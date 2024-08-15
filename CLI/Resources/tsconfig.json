@@ -4,8 +4,7 @@
     "lib": ["ESNext"],
     "checkJs": true,
     "outFile": "",
-    "noImplicitAny": true,
-    
+    "strict": true
   },
-  "include": ["./script.js", "./script.context.d.ts"]
+  "include": ["./*.js", "./script.context.d.ts"]
 }

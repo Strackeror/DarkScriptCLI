@@ -35,6 +35,17 @@ namespace DarkScript3
             return writer.ToString();
         }
 
+        public string UnpackJs()
+        {
+            var writer = new StringWriter();
+            foreach (var func in Decompile())
+            {
+                func.PrintJs(writer);
+                writer.WriteLine();
+            }
+            return writer.ToString();
+        }
+
         public EMEVD Pack(string code, string documentName, out FancyJSCompiler.CompileOutput output)
         {
             output = new FancyJSCompiler(options).Compile(code, docs);

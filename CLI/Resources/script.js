@@ -3,34 +3,34 @@ const End = REST.End;
 const Restart = REST.Restart;
 
 class EventContext {
-  /** @type {number} */ nextSkipId;
-  /** @type {number[]} */ skips;
-  /** @type {number[]} */ labels;
+  /** @type {number} */ nextSkipId = 0;
+  /** @type {number[]} */ skips = [];
+  /** @type {number[]} */ labels = [];
   /** @type {EVENT} */ event;
+  /** @type {number} */ orIndex = 1;
+  /** @type {number} */ andIndex = 1;
 
   /** @param {EVENT} event  */
   constructor(event) {
-    this.nextSkipId = 0;
-    this.skips = [];
-    this.labels = [];
     this.event = event;
   }
 }
 /** @type {EventContext[]} */
 let _eventStack = [];
-/** @returns {EventContext} */
 function _Event() {
-  return _eventStack.at(-1);
+  let _event = _eventStack.at(-1);
+  if (!_event) throw new Error("Not in event");
+  return _event;
 }
 
-/** @type {(id: number, restBehavior: number, instructions: any) => EVENT} */
+/** @type {(id: number, restBehavior: number, instructions: (...any: any[])=>void) => EVENT} */
 function Event(id, restBehavior, instructions) {
   let evt = new EVENT();
   evt.ID = id;
   evt.RestBehavior = restBehavior;
   _eventStack.push(new EventContext(evt));
 
-  instructions.apply(this, _GetArgs(instructions));
+  instructions.apply(undefined, _GetArgs(instructions));
 
   let skips = _Event().skips;
   if (skips.length > 0) {
@@ -39,6 +39,7 @@ function Event(id, restBehavior, instructions) {
       `Reserved skips in Event ${id} have not been filled. Unfilled skips: ${unfilledSkips}`
     );
   }
+  _eventStack.pop();
 
   EVD.Events.Add(evt);
   return evt;
@@ -185,10 +186,15 @@ class ConditionType {
   }
 }
 
+/** @typedef {{on: unknown, off: unknown, is_true: boolean, index: number}} Negator */
+
 class Condition {
+  /** @type {Negator | undefined} */
+  negator = undefined;
+
   /**
    * @param {ConditionType} type
-   * @param  {...any} args
+   * @param {...any} args
    */
   constructor(type, ...args) {
     /** @type {ConditionType} */
@@ -200,12 +206,116 @@ class Condition {
   name() {
     return this.type.constructor?.name;
   }
+
+  /** @type {(on: unknown, off:unknown, index: number) => Condition} */
+  withNegator(on, off, index) {
+    this.negator = { on, off, index, is_true: true };
+    this.args[index] = on;
+    return this;
+  }
+
+  /** @type {() => Condition} */
+  Not() {
+    if (!this.negator) throw new Error(`Cannot negate ${this.name()}`);
+    this.negator.is_true = !this.negator.is_true;
+    this.args[this.negator.index] = this.negator.is_true
+      ? this.negator.on
+      : this.negator.off;
+    return this;
+  }
 }
+
+class Comparable {
+  /** @type {Condition} */
+  condition;
+
+  // /** @type {number} */
+  // lhs;
+
+  /** @type {number} */
+  rhs;
+
+  /** @type {number} */
+  comparison;
+
+  /**
+   * @param {Condition} cond
+   * param {number} lhs
+   * @param {number} comparison
+   * @param {number} rhs
+   */
+  constructor(cond, comparison, rhs) {
+    this.condition = cond;
+    this.rhs = rhs;
+    this.comparison = comparison;
+  }
+
+  /** @type {(num: number) => Condition} */
+  Eq(num) {
+    this.condition.args[this.rhs] = num;
+    return this.condition.withNegator(
+      ComparisonType.Equal,
+      ComparisonType.NotEqual,
+      this.comparison
+    );
+  }
+
+  /** @type {(num: number) => Condition} */
+  Neq(num) {
+    this.condition.args[this.rhs] = num;
+    return this.condition.withNegator(
+      ComparisonType.NotEqual,
+      ComparisonType.Equal,
+      this.comparison
+    );
+  }
+  /** @type {(num: number) => Condition} */
+  Gt(num) {
+    this.condition.args[this.rhs] = num;
+    return this.condition.withNegator(
+      ComparisonType.Greater,
+      ComparisonType.LessOrEqual,
+      this.comparison
+    );
+  }
+  /** @type {(num: number) => Condition} */
+  Lt(num) {
+    this.condition.args[this.rhs] = num;
+    return this.condition.withNegator(
+      ComparisonType.Less,
+      ComparisonType.GreaterOrEqual,
+      this.comparison
+    );
+  }
+  /** @type {(num: number) => Condition} */
+  GtE(num) {
+    this.condition.args[this.rhs] = num;
+    return this.condition.withNegator(
+      ComparisonType.GreaterOrEqual,
+      ComparisonType.Less,
+      this.comparison
+    );
+  }
+  /** @type {(num: number) => Condition} */
+  LtE(num) {
+    this.condition.args[this.rhs] = num;
+    return this.condition.withNegator(
+      ComparisonType.LessOrEqual,
+      ComparisonType.Greater,
+      this.comparison
+    );
+  }
+}
+
+/** @type {(c: Comparable) => Condition} */
+Number.prototype.Eq = function (cond) {
+  return cond.Eq(Number(this));
+};
 
 /** @param {Condition} cond */
 function WaitFor(cond) {
   if (cond.type.Wait) cond.type.Wait(...cond.args);
-  else if (cond.type.If) cond.type.If(MAIN, ...cond.args);
+  else if (cond.type.If) cond.type.If(ConditionGroup.MAIN, ...cond.args);
   else throw new Error(`No Wait function ${cond.name()}`);
 }
 
@@ -214,7 +324,7 @@ function EndIf(cond) {
   if (cond.type.End) cond.type.End(EventEndType.End);
   else throw new Error(`No End function for condition`);
 }
-[];
+
 /** @param {Condition} cond */
 function RestartIf(cond) {
   if (cond.type.End) cond.type.End(EventEndType.Restart);
@@ -225,6 +335,15 @@ function RestartEvent() {
   RestartIf(Always());
 }
 
+function EndEvent() {
+  EndIf(Always());
+}
+
+/** @type {(cond: Condition) => Condition} */
+function Not(cond) {
+  return cond.Not();
+}
+
 /** @typedef {() => void} Body */
 /** @type {(...args: [Condition, Body, ...any[]]) => void} */
 function If(...args) {
@@ -232,8 +351,6 @@ function If(...args) {
   let condition;
   /** @type {() => void} */
   let body;
-  /** @type {number[]} */
-  let skipIds = [];
   /** @type {any[]} */
   let rest = args;
 

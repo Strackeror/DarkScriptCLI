@@ -13,12 +13,20 @@ app.Configure(config =>
         config.AddCommand<DecompileCommand>("decompile");
         config.AddCommand<PreviewCommand>("preview");
         config.AddCommand<DeclareCommand>("declare");
-        config.SetExceptionHandler((exception, _) => {
+        config.SetExceptionHandler((exception, _) =>
+        {
             Console.WriteLine(exception.ToString());
         });
     });
 
 app.Run(args);
+
+enum JsType
+{
+    MattScript,
+    Js,
+    BasicJs,
+}
 
 class CompileCommand : Command<CompileCommand.Settings>
 {
@@ -52,19 +60,8 @@ class DecompileCommand : Command<DecompileCommand.Settings>
         [CommandArgument(1, "[outputPath]")]
         public string? OutputPath { get; init; }
 
-        [CommandOption("--no-fancy")]
-        public bool NoFancy { get; init; }
-    }
-
-    public string Unpack(FancyEventScripter scripter, InstructionDocs docs)
-    {
-        var writer = new StringWriter();
-        foreach (var func in scripter.Decompile())
-        {
-            func.PrintJs(writer);
-            writer.WriteLine();
-        }
-        return writer.ToString();
+        [CommandOption("--js-type")]
+        public JsType Type { get; init; }
     }
 
     public override int Execute(CommandContext context, Settings settings)
@@ -73,9 +70,13 @@ class DecompileCommand : Command<DecompileCommand.Settings>
         var docs = new InstructionDocs("er-common.emedf.json");
         var eventScripter = new EventScripter(settings.FilePath, docs);
         var fancyScripter = new FancyEventScripter(eventScripter, docs, options);
-        var decompiled = settings.NoFancy
-            ? fancyScripter.Unpack()
-            : Unpack(fancyScripter, docs);
+        var decompiled = settings.Type switch
+        {
+            JsType.Js => fancyScripter.UnpackJs(),
+            JsType.MattScript => fancyScripter.Unpack(),
+            JsType.BasicJs => eventScripter.Unpack(),
+            _ => throw new Exception("")
+        };
         if (settings.OutputPath is not null)
             File.WriteAllText(settings.OutputPath, decompiled);
         else
@@ -92,25 +93,25 @@ class PreviewCommand : Command<PreviewCommand.Settings>
         [CommandArgument(0, "[filePath]")]
         required public string FilePath { get; init; }
 
-        [CommandOption("--no-fancy")]
-        public bool NoFancy { get; init; }
+        [CommandOption("--js-type")]
+        public JsType Type { get; init; }
     }
     public override int Execute(CommandContext context, Settings settings)
     {
         var options = new EventCFG.CFGOptions();
         var docs = new InstructionDocs("er-common.emedf.json");
         var eventScripter = new EventScripter("dummy.emevd.dcx", docs, new EMEVD(EMEVD.Game.Sekiro));
-        var fancyEventScripter = new FancyEventScripter(eventScripter, docs, options);
+        var fancyScripter = new FancyEventScripter(eventScripter, docs, options);
         eventScripter.Pack(File.ReadAllText(settings.FilePath), settings.FilePath);
 
-        if (!settings.NoFancy)
+        var decompiled = settings.Type switch
         {
-            Console.Write(fancyEventScripter.Unpack());
-        }
-        else
-        {
-            Console.Write(eventScripter.Unpack());
-        }
+            JsType.MattScript => fancyScripter.Unpack(),
+            JsType.Js => fancyScripter.UnpackJs(),
+            JsType.BasicJs => eventScripter.Unpack(),
+            _ => throw new Exception("")
+        };
+        Console.Write(decompiled);
         return 0;
     }
 }
@@ -214,6 +215,21 @@ class DeclareCommand : Command<DeclareCommand.Settings>
         var options = new EventCFG.CFGOptions();
         var docs = new InstructionDocs("er-common.emedf.json");
         var writer = new StringWriter();
+        var jsContext = JsContextGen.GenerateContext(docs.DOC, ConditionData.ReadStream("conditions.json"));
+        var decls = JsContextGen.GenerateTsDecls(jsContext);
+        decls += Resource.Text("declarations.d.ts");
+
+        switch (settings.FilePath)
+        {
+            case string s: 
+                File.WriteAllText(s, decls); 
+                break;
+            case null: 
+                Console.Write(decls); 
+                break;
+        }
+        return 0;
+
 
         EMEDF DOC = docs.DOC;
 

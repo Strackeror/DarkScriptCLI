@@ -52,7 +52,7 @@
       "goto": "1000[101]",
       "negate_field": "Desired Condition Group State",
       "as_bool": {
-        "shortname": "ConditionGroup",
+        "shortname": "CondGroup",
         "true": "PASS"
       },
       "hidden": true

@@ -38,22 +38,22 @@ declare class Condition {
 }
 declare function Not(cond: Condition): Condition;
 
-declare class Comparison {
-  Eq(comp: Comparison | number): Condition;
-  NEq(comp: Comparison | number): Condition;
-  Gt(comp: Comparison | number): Condition;
-  GtE(comp: Comparison | number): Condition;
-  Lt(comp: Comparison | number): Condition;
-  LtE(comp: Comparison | number): Condition;
+declare class Comparable {
+  Eq(comp: Comparable | number): Condition;
+  NEq(comp: Comparable | number): Condition;
+  Gt(comp: Comparable | number): Condition;
+  GtE(comp: Comparable | number): Condition;
+  Lt(comp: Comparable | number): Condition;
+  LtE(comp: Comparable | number): Condition;
 }
 
 declare interface Number {
-  Eq(comp: Comparison | number): Condition;
-  NEq(comp: Comparison | number): Condition;
-  Gt(comp: Comparison | number): Condition;
-  GtE(comp: Comparison | number): Condition;
-  Lt(comp: Comparison | number): Condition;
-  LtE(comp: Comparison | number): Condition;
+  Eq(comp: Comparable | number): Condition;
+  NEq(comp: Comparable | number): Condition;
+  Gt(comp: Comparable | number): Condition;
+  GtE(comp: Comparable | number): Condition;
+  Lt(comp: Comparable | number): Condition;
+  LtE(comp: Comparable | number): Condition;
 }
 
 declare const L0: Label;

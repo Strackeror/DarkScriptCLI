@@ -209,7 +209,9 @@ namespace DarkScript3
             v8.AddHostType("Console", typeof(Console));
             v8.Execute(Resource.Text("script.js"));
 
-            var code = JsContextGen.GenerateContextJs(docs, ConditionData.ReadStream("conditions.json"));
+            var context = JsContextGen.GenerateContext(docs.DOC, ConditionData.ReadStream("conditions.json"));
+            var code = JsContextGen.GenerateContextJs(context);
+
 #if DEBUG
             File.WriteAllText(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location) + "\\script.generated.js", code);
 #endif
@@ -219,7 +221,7 @@ namespace DarkScript3
             }
             catch (Exception ex) when (ex is IScriptEngineException scriptException)
             {
-                throw new Exception($"Error processing {docs.ResourceString}: {scriptException.ErrorDetails}");
+                throw new Exception($"Error processing js context: {scriptException.ErrorDetails}");
             }
         }
 
