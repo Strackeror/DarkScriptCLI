@@ -59,6 +59,12 @@ public static class JsContextGen
             return $"{name}";
         }
 
+        public string CallArg()
+        {
+            if (doc.Vararg) return $"...{name}";
+            return name;
+        }
+
         public string Val()
         {
             if (doc.Vararg) return $"...{name}";
@@ -200,12 +206,13 @@ public static class JsContextGen
             .SelectMany(cls => cls.Instructions.Select(
                 instr => new Instruction(GetFunc(instr), cls, instr)))
             .ToList();
+        var globalEnums = doc.DarkScript.GlobalEnums ?? ["ON/OFF", "ON/OFF/CHANGE", "Condition Group", "Condition State", "Disabled/Enabled"];
         var enums = doc.Enums
             .Where(e => e.DisplayName is not "BOOL" and not "ONOFF")
             .Select(e => new Enum(
                     e.DisplayName,
                     e.Values.Select(doc => (Regex.Replace(doc.Value, @"[^\w]+", ""), doc.Key)).ToList(),
-                    e.DisplayName is "ONOFF" or "ONOFFCHANGE" or "ConditionGroup" or "ConditionState" or "DisabledEnabled"
+                    globalEnums.Contains(e.Name)
                 )
             )
             .ToList();
@@ -221,7 +228,7 @@ public static class JsContextGen
             if (@short.Games is not null && !@short.Games.Contains("er")) continue;
             var maybeFunc = GetFunc(doc, @short.Cmd);
             if (maybeFunc is not Func func) continue;
-            func = func.Map(arg => arg with {@default = null});
+            func = func.Map(arg => arg with { @default = null });
 
             foreach (var shortVersion in @short.Shorts ?? new())
             {
@@ -236,12 +243,12 @@ public static class JsContextGen
             if (@short.Enable is not null)
                 foreach (var state in new[] { "Enable", "Disable" })
                 {
-                    var call = func;
                     var shortFunc = func with { name = state + @short.Enable };
+                    shortFunc.args = shortFunc.args.SkipLast(1).ToArray();
 
+                    var call = func with { args = func.args.ToArray() };
                     var index = call.args.Count() - 1;
                     call.args[index].@default = state + "d";
-                    shortFunc.args = shortFunc.args.SkipLast(1).ToArray();
                     shorters.Add((shortFunc, call));
                 }
         }
@@ -265,7 +272,7 @@ public static class JsContextGen
             if (maybeBaseFunc is not Func func) continue;
 
 
-            func = func.Map(arg => arg with {@default = null});
+            func = func.Map(arg => arg with { @default = null });
             func = func with { name = cond.Name };
             var condFunc = HandleOptFields(func, cond.OptFields);
             var negateIndex = Array.FindIndex(func.args, arg => arg.doc.Name == cond.NegateField);
@@ -336,7 +343,7 @@ public static class JsContextGen
                      for (let arg of [{{Join(args, a => a.name, ", ")}}]) {
                          if (arg == void 0) throw `!!! Argument ${arg} in instruction "{{name}}" is undefined or missing.`
                      }
-                     var ins = _Instruction({{cls.Index}}, {{instr.Index}}, [{{Join(args, a => a.name, ", ")}}]);
+                     var ins = _Instruction({{cls.Index}}, {{instr.Index}}, [{{Join(args, a => a.CallArg(), ", ")}}]);
                      Scripter.CurrentInsName = "";
                  }
                  """);
@@ -395,6 +402,7 @@ public static class JsContextGen
         {
             writer.WriteLine($"const {key} = {value};");
         }
+        writer.WriteLine("const mainGroupAbuse = CondGroup(MAIN)");
         return writer.ToString();
     }
 
@@ -422,7 +430,7 @@ public static class JsContextGen
 
         foreach (var cond in context.conditions)
         {
-            writer.WriteLine(cond.baseFunc.Declare());
+            writer.WriteLine(cond.baseFunc.Declare() + ": Condition");
             foreach (var @bool in cond.bools)
                 writer.WriteLine(@bool.func.Declare() + ": Condition");
             foreach (var comp in cond.compares)

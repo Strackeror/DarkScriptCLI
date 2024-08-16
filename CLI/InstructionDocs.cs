@@ -541,34 +541,7 @@ namespace DarkScript3
             throw new Exception("Invalid type in argument definition.");
         }
 
-        /// <summary>
-        /// Returns a dictionary containing the textual names of an event's parameters.
-        /// </summary>
-        public Dictionary<Parameter, string> ParamNames(Event evt)
-        {
-            Dictionary<long, List<Parameter>> paramValues = new Dictionary<long, List<Parameter>>();
-            for (int i = 0; i < evt.Parameters.Count; i++)
-            {
-                Parameter prm = evt.Parameters[i];
-                if (!paramValues.ContainsKey(prm.SourceStartByte))
-                    paramValues[prm.SourceStartByte] = new List<Parameter>();
 
-                paramValues[prm.SourceStartByte].Add(prm);
-            }
-
-            Dictionary<Parameter, string> paramNames = new Dictionary<Parameter, string>();
-
-            int ind = 0;
-            foreach (var kv in paramValues)
-            {
-                foreach (var p in kv.Value)
-                {
-                    paramNames[p] = $"X{p.SourceStartByte}_{p.ByteCount}";
-                }
-                ind++;
-            }
-            return paramNames;
-        }
 
         /// <summary>
         /// Creates an argument list for an instruction, with parameters and formatting as well.

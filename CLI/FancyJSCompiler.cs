@@ -829,15 +829,16 @@ namespace DarkScript3
             {
                 // func.Id is currently meaningless, like making an anonymous function with function somename() {}
                 // Otherwise, should have plain params, block statement body, and no attributes like Generator/Expression/Async/Strict.
-                List<string> args = func.Params.Select(param =>
+                List<EventParam> args = func.Params.Select(param =>
                 {
                     if (param is Identifier pid)
                     {
-                        return pid.Name;
+                        return EventParam.Parse(pid.Name);
                     }
                     context.Error(param, "Param not a plain identifier");
-                    return "error";
+                    return new EventParam("error", 0, 0);
                 }).ToList();
+
                 EventFunction ret = new EventFunction { ID = id, RestBehavior = restBehavior, Params = args };
                 if (func.Body is BlockStatement block)
                 {

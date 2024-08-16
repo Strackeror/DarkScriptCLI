@@ -1185,7 +1185,7 @@ namespace DarkScript3
                     {
                         throw new FancyNotSupportedException($"Parameterized condition group", node.Im);
                     }
-                    if (cond.Name == "ConditionGroup" || cond.Name == "CompareConditionGroup")
+                    if (cond.Name == "CondGroup" || cond.Name == "CompareConditionGroup")
                     {
                         condIm.Cond = new CondRef { Compiled = false, Group = getArgGroup(node, cond.Args[0]), Negate = cond.Negate };
                     }

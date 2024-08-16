@@ -5,6 +5,9 @@ using System.IO;
 using System.Text;
 using static SoulsFormats.EMEVD;
 using System.Security.Cryptography;
+using Esprima;
+using System.Text.RegularExpressions;
+using Esprima.Ast;
 
 namespace DarkScript3
 {
@@ -13,13 +16,35 @@ namespace DarkScript3
         public static readonly string SingleIndent = "    ";
         private static readonly int columnLimit = 100;
 
+        public class EventParam(string name, int startByte, int byteCount)
+        {
+#nullable enable
+
+            public string Repr { get => $"X{startByte}_{byteCount}"; }
+            public (int, int) Bytes { get => (startByte, byteCount); }
+            public string Name { get; set; } = name;
+            public bool Named = false;
+
+            static Regex instructionName = new Regex(@"^([a-zA-Z][\w]*)?X(\d+)_(\d+)$");
+            public static EventParam? Parse(string fullName)
+            {
+                var match = instructionName.Match(fullName);
+                if (!match.Success) return null;
+                var param = new EventParam(match.Groups[1].Value, int.Parse(match.Groups[2].Value), int.Parse(match.Groups[3].Value));
+                if (param.Name.Any()) param.Named = true;
+                return param;
+            }
+
+#nullable restore
+        }
+
         public class EventFunction
         {
             // Normally an int, but may be a SourceNode :fatcat:
             public object ID { get; set; }
             public Event.RestBehaviorType RestBehavior { get; set; }
             public bool Fancy { get; set; }
-            public List<string> Params = new List<string>();
+            public List<EventParam> Params = new();
             public List<Intermediate> Body = new List<Intermediate>();
 
             // Cosmetics
@@ -145,18 +170,76 @@ namespace DarkScript3
                         prefix = "";
                     }
                 }
-                writer.WriteLine($"{(Fancy ? "$" : "")}Event({ID}, {RestBehavior}, function({string.Join(", ", Params)}) {{");
+                foreach (var param in Params)
+                {
+                    param.Name = $"{param.Name}{param.Repr}";
+                }
+                writer.WriteLine($"{(Fancy ? "$" : "")}Event({ID}, {RestBehavior}, function({string.Join(", ", Params.Select(p => p.Name))}) {{");
                 subprint(Body, 1);
                 string funcSuffix = processDecorations(EndComments, SingleIndent);
                 writer.WriteLine($"}});{funcSuffix}");
             }
             public void PrintJs(TextWriter writer)
             {
-                writer.WriteLine($"let event{ID} = new EventC({ID}, {RestBehavior}, function({string.Join(", ", Params)}) {{");
-                void subprint(List<Intermediate> stmts, int indentCount)
+                HashSet<string> names = new();
+                foreach (var param in Params)
+                {
+                    while (!names.Add(param.Name))
+                    {
+                        param.Name += "_";
+                    }
+                }
+                var args = string.Join(", ", Params.Select(p => $"{p.Name} = \"{p.Repr}\""));
+                writer.WriteLine($"let event{ID} = new EventC({ID}, {RestBehavior}, function({args}) {{");
+
+                HashSet<string> variables = new();
+                void condVarInit(Cond cond)
+                {
+                    switch (cond)
+                    {
+                        case CondRef condRef:
+                            variables.Add(condRef.Name);
+                            break;
+                        case OpCond opCond:
+                            opCond.Ops.ForEach(condVarInit);
+                            break;
+
+                    }
+                }
+                void condVarStmts(List<Intermediate> statements)
+                {
+                    foreach (var stmt in statements)
+                    {
+                        switch (stmt)
+                        {
+                            case IfElse ifElse:
+                                condVarStmts(ifElse.True);
+                                if (ifElse.False is not null) condVarStmts(ifElse.False);
+                                break;
+                            case CondAssign assign:
+                                variables.Add(assign.ToVar);
+                                break;
+                        }
+
+                        if (stmt is CondIntermediate cond)
+                        {
+                            condVarInit(cond.Cond);
+                        }
+
+                    }
+                }
+                condVarStmts(Body);
+                foreach (var variable in variables)
+                {
+                    if (variable is "mainGroupAbuse") continue;
+                    writer.WriteLine($"    let {variable} = Condition.New();");
+                }
+
+
+                void subprint(List<Intermediate> statements, int indentCount)
                 {
                     string indent = string.Join("", Enumerable.Repeat(SingleIndent, indentCount));
-                    foreach (var stmt in stmts)
+                    foreach (var stmt in statements)
                     {
                         if (stmt is Instr instr && instr.Name == "InitializeEvent")
                         {
@@ -168,20 +251,22 @@ namespace DarkScript3
                         else if (stmt is IfElse ifElse)
                         {
                             writer.WriteLine($"{indent}If ({ifElse.Cond.ToJs()}, () => {{");
-                            subprint(ifElse.True, indentCount + 1);
+                            subprint(ifElse.True, indentCount + 2);
 
                             var cur = ifElse;
                             while (cur.False is [IfElse next])
                             {
-                                writer.WriteLine($"{indent}}},");
-                                writer.WriteLine($"{indent}{cur.Cond.ToJs()}, () => {{");
-                                subprint(cur.False, indentCount + 1);
+                                cur = next;
+                                writer.WriteLine($"{indent}    }},");
+                                writer.WriteLine($"{indent}    {cur.Cond.ToJs()}, () => {{");
+                                subprint(cur.True, indentCount + 2);
                             }
 
                             if (cur.False.Any())
                             {
-                                writer.WriteLine($"{indent}}},");
-                                writer.WriteLine($"{indent}Else, () => {{");
+                                writer.WriteLine($"{indent}    }},");
+                                writer.WriteLine($"{indent}    Else, () => {{");
+                                subprint(cur.False, indentCount + 2);
                             }
                             writer.WriteLine($"{indent}}});");
                         }
@@ -374,11 +459,12 @@ namespace DarkScript3
             public override string ToString() => $"{Name}({ArgString(Args, Layers)});";
         }
 
+
         // Can appear as an arg in a List<object> of args, like X0_4
         public class ParamArg
         {
-            public string Name { get; set; }
-            public override string ToString() => Name;
+            public EventParam Param { get; set; }
+            public override string ToString() => Param.Name;
         }
 
         public class DisplayArg
@@ -493,9 +579,9 @@ namespace DarkScript3
             public override string ToString() => $"{ToVar ?? $"cond[{ToCond}]"} {StrAssign[Op]} {PlainCond};";
             public override string ToJs() => Op switch
             {
-                CondAssignOp.AssignAnd => $"{ToVar} = {ToVar}.And({Cond.ToJs()})",
-                CondAssignOp.AssignOr => $"{ToVar} = {ToVar}.Or({Cond.ToJs()})",
-                _ => $"var {ToVar} = {Cond.ToJs()}",
+                CondAssignOp.AssignAnd => $"{ToVar} = {ToVar}.And({Cond.ToJs()}).Get()",
+                CondAssignOp.AssignOr => $"{ToVar} = {ToVar}.Or({Cond.ToJs()}).Get()",
+                _ => $"{ToVar} = {Cond.ToJs()}.Get()",
             };
 
             public override StringTree GetStringTree() => StringTree.CombinedStart($"{ToVar} {StrAssign[Op]} ", Cond.GetStringTree(true), ";");
@@ -555,14 +641,13 @@ namespace DarkScript3
             public override string ToString() => Cond.Always
                 ? $"{(ToLabel == null ? (ToNode >= 0 ? $"GotoInternal({ToNode}" : $"SkipLines({SkipLines}") : $"Goto({ToLabel}")});"
                 : $"{(ToLabel == null ? (ToNode >= 0 ? $"GotoIfInternal({ToNode}" : $"SkipLinesIf({SkipLines}") : $"GotoIf({ToLabel}")}, {PlainCond});";
-            public override string ToJs()
+            public override string ToJs() => (SkipLines, Cond.Always) switch
             {
-                var label = SkipLines >= 0 ? $"\"{ToLabel}\"" : ToLabel;
-                if (Cond.Always)
-                    return $"Goto({label})";
-                else
-                    return $"GotoIf({label}, {Cond.ToJs()})";
-            }
+                ( < 0, true) => $"Goto({ToLabel})",
+                ( < 0, false) => $"GotoIf({ToLabel}, {Cond.ToJs()})",
+                (_, true) => $"Skip({SkipLines})",
+                (_, false) => $"SkipIf({SkipLines}, {Cond.ToJs()})",
+            };
 
             public override StringTree GetStringTree() => Cond.Always
                 ? base.GetStringTree()
@@ -607,6 +692,7 @@ namespace DarkScript3
             public virtual StringTree GetStringTree(bool stripParens = false) => StringTree.Of(this);
 
             protected string Not => Negate ? ".Not()" : "";
+            protected string WrapNotJs(string content) => Negate ? $"Not({content})" : content;
             public virtual string ToJs() => ToString();
 
             public static Cond ALWAYS = new CmdCond { Name = "Always" };
@@ -663,10 +749,10 @@ namespace DarkScript3
             {
                 var lhs = Lhs is null
                     ? $"{CmdLhs.ToJs()}"
-                    : $"({Lhs})";
+                    : $"Op({Lhs})";
                 var op = Negate
-                    ? JsOp(Type)
-                    : JsOp(OppositeComparison[Type]);
+                    ? JsOp(OppositeComparison[Type])
+                    : JsOp(Type);
                 return $"{lhs}.{op}({Rhs})";
             }
         }
@@ -678,12 +764,7 @@ namespace DarkScript3
 
             public override string DocName => Name;
             public override string ToString() => $"{Prefix}{Name}({ArgString(Args, null)})";
-            public override string ToJs()
-            {
-                var expr = $"{Name}({ArgString(Args, null)})";
-                if (Negate) expr = $"Not({expr})";
-                return expr;
-            }
+            public override string ToJs() => WrapNotJs($"{Name}({ArgString(Args, null)})");
         }
 
         public class CondRef : Cond
@@ -696,9 +777,9 @@ namespace DarkScript3
             // Can add an RHS here if needed
             public string Name { get; set; }
 
-            public override string DocName => Compiled ? "CompiledConditionGroup" : "ConditionGroup";
+            public override string DocName => Compiled ? "CompiledConditionGroup" : "CondGroup";
             public override string ToString() => $"{Prefix}{Name ?? $"cond[{Group}]"}{(Compiled ? ".Passed" : "")}";
-            public override string ToJs() => $"{Name}";
+            public override string ToJs() => WrapNotJs($"{Name}{(Compiled ? ".Passed" : "")}");
         }
 
         public class OpCond : Cond
@@ -710,7 +791,7 @@ namespace DarkScript3
             private string CombineOp => And ? " && " : " || ";
             private string CombineFunc => And ? ").And(" : ").Or(";
             public override string ToString() => $"{Prefix}({string.Join(CombineOp, Ops)})";
-            public override string ToJs() => $"({string.Join(CombineFunc, Ops.Select(o => o.ToJs()))})";
+            public override string ToJs() => WrapNotJs($"({string.Join(CombineFunc, Ops.Select(o => o.ToJs()))})");
             public override StringTree GetStringTree(bool stripParens = false) => new StringTree
             {
                 Children = Ops.Select(c => c.GetStringTree()).ToList(),

@@ -56,7 +56,7 @@ namespace DarkScript3
             catch (JSScriptException ex)
             {
                 output.RewriteStackFrames(ex, documentName);
-                throw ex;
+                throw;
             }
         }
 
@@ -82,6 +82,18 @@ namespace DarkScript3
             return output.GetDiffSegments();
         }
 
+        public static Dictionary<Parameter, EventParam> ParamNames(Event evt)
+        {
+            return evt.Parameters
+                .GroupBy(p => (p.SourceStartByte, p.ByteCount))
+                .SelectMany((group, i) =>
+                {
+                    var eventParam = new EventParam($"_{i}", (int)group.Key.SourceStartByte, group.Key.ByteCount);
+                    return group.Select(p => (p, eventParam));
+                })
+                .ToDictionary();
+        }
+
         public EventFunction[] Decompile()
         {
             var ret = new List<EventFunction> { };
@@ -93,9 +105,9 @@ namespace DarkScript3
                 string id = evt.ID.ToString();
                 string restBehavior = evt.RestBehavior.ToString();
 
-                Dictionary<Parameter, string> paramNames = docs.ParamNames(evt);
-                List<string> argNameList = paramNames.Values.Distinct().ToList();
-                Dictionary<Parameter, ParamArg> paramArgs = paramNames.ToDictionary(e => e.Key, e => new ParamArg { Name = e.Value });
+                Dictionary<Parameter, EventParam> eventParams = ParamNames(evt);
+                List<EventParam> argNameList = eventParams.Values.Distinct().ToList();
+                Dictionary<Parameter, ParamArg> paramArgs = eventParams.ToDictionary(e => e.Key, e => new ParamArg { Param = e.Value });
 
                 EventFunction func = new EventFunction { ID = (int)evt.ID, RestBehavior = evt.RestBehavior, Params = argNameList };
 
@@ -125,6 +137,15 @@ namespace DarkScript3
                             }
                             return val;
                         });
+
+                        foreach (var (arg, argDoc) in instr.Args.Zip(doc.Arguments))
+                        {
+                            if (arg is ParamArg paramArg && !paramArg.Param.Named)
+                            {
+                                paramArg.Param.Name = argDoc.DisplayName;
+                                paramArg.Param.Named = true;
+                            }
+                        }
                     }
                     catch (Exception ex)
                     {

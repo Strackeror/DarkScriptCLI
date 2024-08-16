@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.Tracing;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -61,6 +62,7 @@ namespace DarkScript3
             InitAll();
         }
 
+
         /// <summary>
         /// Called by JS to add instructions to the event currently being edited.
         /// </summary>
@@ -87,17 +89,16 @@ namespace DarkScript3
                 {
                     if (args[i] is bool)
                         args[i] = (bool)args[i] ? 1 : 0;
-                    else if (args[i] is string)
+                    else if (args[i] is string argStr)
                     {
                         if (isVar)
                             throw new Exception("Event initializers cannot be dependent on parameters.");
 
-                        IEnumerable<int> nums = (args[i] as string).Substring(1).Split('_').Select(s => int.Parse(s));
-                        if (nums.Count() != 2)
+                        var param = ScriptAst.EventParam.Parse(argStr);
+                        if (param is null)
                             throw new Exception("Invalid parameter string: {" + args[i] + "}");
 
-                        int sourceStartByte = nums.ElementAt(0);
-                        int length = nums.ElementAt(1);
+                        var (sourceStartByte, length) = param.Bytes;
                         int targetStartByte = docs.FuncBytePositions[doc][i];
 
                         Parameter p = new Parameter(evt.Instructions.Count, targetStartByte, sourceStartByte, length);
@@ -175,6 +176,14 @@ namespace DarkScript3
             ins.ArgData[0] = (byte)skipCount;
         }
 
+        public void FillGotoPlaceholder(Event evt, int fillIndex, byte labelIndex)
+        {
+            Instruction ins = evt.Instructions[fillIndex];
+            if (ins.ArgData is not [99, ..])
+                throw new Exception("Target instruction does not have expected placeholder");
+            ins.ArgData[0] = labelIndex;
+        }
+
         public int ConvertFloatToIntBytes(double input)
         {
             return BitConverter.ToInt32(BitConverter.GetBytes((float)input), 0);
@@ -207,7 +216,10 @@ namespace DarkScript3
             v8.AddHostType("PARAMETER", typeof(Parameter));
             v8.AddHostType("REST", typeof(Event.RestBehaviorType));
             v8.AddHostType("Console", typeof(Console));
-            v8.Execute(Resource.Text("script.js"));
+
+
+            v8.Execute("script.js", Resource.Text("script.js"));
+            v8.Execute("scriptconditions.js", Resource.Text("scriptconditions.js"));
 
             var context = JsContextGen.GenerateContext(docs.DOC, ConditionData.ReadStream("conditions.json"));
             var code = JsContextGen.GenerateContextJs(context);
@@ -216,8 +228,8 @@ namespace DarkScript3
             File.WriteAllText(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location) + "\\script.generated.js", code);
 #endif
             try
-            {
-                v8.Execute(code.ToString());
+            {   
+                v8.Execute("script.generated.js", code.ToString());
             }
             catch (Exception ex) when (ex is IScriptEngineException scriptException)
             {

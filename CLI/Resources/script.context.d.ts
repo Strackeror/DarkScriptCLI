@@ -22,6 +22,11 @@ declare const EVD: {
 declare class Scripter {
   static MakeInstruction(_: EVENT, ...arg: any[]): unknown;
   static FillSkipPlaceholder(event: EVENT, index: number): unknown;
+  static FillGotoPlaceholder(
+    event: EVENT,
+    index: number,
+    label: Label
+  ): unknown;
   static ConvertFloatToIntBytes(float: number): number;
   static CurrentInsName: string;
 }
@@ -39,11 +44,11 @@ declare type IfFunc = (cond: ConditionGroup, ...args: any[]) => void;
 declare type SkipFunc = (skip: number, ...args: any[]) => void;
 declare type Endfunc = (end: EventEndType, ...args: any[]) => void;
 declare type GotoFunc = (label: Label, ...args: any[]) => void;
-declare type Wait = (...args: any[]) => void;
+declare type WaitFunc = (...args: any[]) => void;
 
 declare interface Number {
   Eq(c: Comparable): Condition;
-  Neq(c: Comparable): Condition;
+  NEq(c: Comparable): Condition;
   Gt(c: Comparable): Condition;
   Lt(c: Comparable): Condition;
   GtE(c: Comparable): Condition;
@@ -55,7 +60,10 @@ declare function InitializeEvent(
   id: number,
   ...args: number[]
 ): void;
+declare const CondAlways: ConditionType;
 declare function Always(): Condition;
+declare function CondGroup(group: ConditionGroup): Condition;
+declare function CompiledConditionGroup(group: ConditionGroup): Condition;
 
 declare enum EventEndType {
   End,
@@ -101,4 +109,9 @@ declare enum ConditionGroup {
   AND_13 = 13,
   AND_14 = 14,
   AND_15 = 15,
+}
+
+declare enum ConditionState {
+  FAIL = 0,
+  PASS = 1,
 }

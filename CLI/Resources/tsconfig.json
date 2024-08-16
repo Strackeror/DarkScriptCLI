@@ -6,5 +6,5 @@
     "outFile": "",
     "strict": true
   },
-  "include": ["./*.js", "./script.context.d.ts"]
+  "include": ["*.js", "./script.context.d.ts"]
 }

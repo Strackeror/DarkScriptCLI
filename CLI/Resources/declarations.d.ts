@@ -12,13 +12,17 @@ declare function EndEvent();
 declare function RestartEvent();
 declare function RestartIf(cond: Condition);
 declare function EndIf(cond: Condition);
-declare function Goto(label: Label | string);
-declare function GotoIf(label: Label | string, cond: Condition);
+declare function Goto(label: Label);
+declare function GotoIf(label: Label, cond: Condition);
+declare function Skip(count: number);
+declare function SkipIf(count: number, cond: Condition);
+declare function SkipTo(label: string);
+declare function SkipToIf(label: string, cond: Condition);
 declare function WaitFor(cond: Condition);
 declare function NoOp();
-declare function Skip(name: string);
+declare function NamedLabel(str: string);
 
-declare const Else: Condition;
+declare const Else: undefined;
 declare const mainGroupAbuse: Condition;
 
 type Alternating<A, B> = [A, B, A?, B?, A?, B?, A?, B?, A?, B?];
@@ -32,11 +36,17 @@ declare class EventC {
 }
 
 declare class Condition {
+  get Passed(): Condition;
   And(cond: Condition): Condition;
   Or(cond: Condition): Condition;
   Not(): Condition;
+  Get(): Condition;
+
+  static New(): Condition;
 }
+
 declare function Not(cond: Condition): Condition;
+declare function Get(cond: Condition): Condition;
 
 declare class Comparable {
   Eq(comp: Comparable | number): Condition;
