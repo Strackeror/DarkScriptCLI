@@ -47,7 +47,6 @@ class Condition {
   /** @type {(on: unknown, off:unknown, index: number) => Condition} */
   withNegator(on, off, index) {
     this.negator = { on, off, index, is_true: true };
-    this.args[index] = on;
     return this;
   }
 
@@ -74,11 +73,12 @@ class Condition {
   /** @type {() => Condition} */
   Not() {
     if (this.negator) {
-      this.negator.is_true = !this.negator.is_true;
-      this.args[this.negator.index] = this.negator.is_true
-        ? this.negator.on
-        : this.negator.off;
-      return this;
+      var negated = new Condition(this.type, ...this.args);
+      var negator = { ...this.negator };
+      negator.is_true = !negator.is_true;
+      negated.args[negator.index] = negator.is_true ? negator.on : negator.off;
+      negated.negator = negator;
+      return negated;
     }
 
     if (this.type.If) {
@@ -180,60 +180,58 @@ class Comparable {
     this.comparison = comparison;
   }
 
-  /** @type {(num: number) => Condition} */
-  Eq(num) {
+  /** @type {(type: ComparisonType) => ComparisonType} */
+  static OppositeComparison(type) {
+    switch (type) {
+      case ComparisonType.Equal:
+        return ComparisonType.NotEqual;
+      case ComparisonType.NotEqual:
+        return ComparisonType.Equal;
+      case ComparisonType.Greater:
+        return ComparisonType.LessOrEqual;
+      case ComparisonType.Less:
+        return ComparisonType.GreaterOrEqual;
+      case ComparisonType.GreaterOrEqual:
+        return ComparisonType.Less;
+      case ComparisonType.LessOrEqual:
+        return ComparisonType.Greater;
+    }
+  }
+
+  /** @type {(num: number, comparison: ComparisonType) => Condition} */
+  _Compare(num, comparison) {
     this.condition.args[this.rhs] = num;
+    this.condition.args[this.comparison] = comparison;
     return this.condition.withNegator(
-      ComparisonType.Equal,
-      ComparisonType.NotEqual,
+      comparison,
+      Comparable.OppositeComparison(comparison),
       this.comparison
     );
   }
 
   /** @type {(num: number) => Condition} */
+  Eq(num) {
+    return this._Compare(num, ComparisonType.Equal);
+  }
+  /** @type {(num: number) => Condition} */
   NEq(num) {
-    this.condition.args[this.rhs] = num;
-    return this.condition.withNegator(
-      ComparisonType.NotEqual,
-      ComparisonType.Equal,
-      this.comparison
-    );
+    return this._Compare(num, ComparisonType.NotEqual);
   }
   /** @type {(num: number) => Condition} */
   Gt(num) {
-    this.condition.args[this.rhs] = num;
-    return this.condition.withNegator(
-      ComparisonType.Greater,
-      ComparisonType.LessOrEqual,
-      this.comparison
-    );
+    return this._Compare(num, ComparisonType.Greater);
   }
   /** @type {(num: number) => Condition} */
   Lt(num) {
-    this.condition.args[this.rhs] = num;
-    return this.condition.withNegator(
-      ComparisonType.Less,
-      ComparisonType.GreaterOrEqual,
-      this.comparison
-    );
+    return this._Compare(num, ComparisonType.Less);
   }
   /** @type {(num: number) => Condition} */
   GtE(num) {
-    this.condition.args[this.rhs] = num;
-    return this.condition.withNegator(
-      ComparisonType.GreaterOrEqual,
-      ComparisonType.Less,
-      this.comparison
-    );
+    return this._Compare(num, ComparisonType.GreaterOrEqual);
   }
   /** @type {(num: number) => Condition} */
   LtE(num) {
-    this.condition.args[this.rhs] = num;
-    return this.condition.withNegator(
-      ComparisonType.LessOrEqual,
-      ComparisonType.Greater,
-      this.comparison
-    );
+    return this._Compare(num, ComparisonType.LessOrEqual);
   }
 }
 
@@ -287,8 +285,6 @@ function GotoIf(target, cond) {
   else if (cond.type.If) GotoIf(target, cond.Get());
   else throw new Error("Can't goto for condition");
 }
-
-
 
 /** @type {(target: Label) => void} */
 function Goto(target) {

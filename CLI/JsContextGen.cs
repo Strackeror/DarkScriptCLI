@@ -282,6 +282,8 @@ public static class JsContextGen
             foreach (var @bool in cond.AllBools)
             {
                 if (cond.NegateField is null) throw new Exception("No negate field");
+                var (on, off) = NegatedValues(func.args[negateIndex], @bool.True, @bool.False);
+
                 var boolFunc = condFunc with { name = @bool.Name };
                 boolFunc = boolFunc
                     .Map(@bool.Required?.Select(r => r.Field), arg => null)
@@ -290,9 +292,8 @@ public static class JsContextGen
                 var call = func;
                 call = call
                     .Map(@bool.Required?.Select(ReplaceArg))
-                    .Map(cond.NegateField, MakePlaceholder);
+                    .Map(cond.NegateField, arg => arg with { @default = on });
 
-                var (on, off) = NegatedValues(func.args[negateIndex], @bool.True, @bool.False);
                 bools.Add(new CondBool(boolFunc, call, on, off));
             }
 
