@@ -43,11 +43,11 @@ public static class JsContextGen
             if (doc.EnumName == "BOOL")
                 type = "boolean | 0 | 1";
             if (doc.Vararg)
-                return $"...{name}: {type}[]";
+                return $"...{name}: Arg<{type}>[]";
             else if (@default is not null)
-                return $"{name}?: {type}";
+                return $"{name}?: Arg<{type}>";
             else
-                return $"{name}: {type}";
+                return $"{name}: Arg<{type}>";
         }
 
         public string DefaultValue() => doc.GetDisplayValue(doc.Default).ToString() ?? "";

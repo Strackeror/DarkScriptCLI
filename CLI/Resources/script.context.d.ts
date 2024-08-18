@@ -1,9 +1,13 @@
 // C# Shared stuff
+declare class INSTRUCTION {}
+
 declare class EVENT {
   ID: number;
   RestBehavior: number;
   Instructions: {
     Count: number;
+    Add(ins: INSTRUCTION): void;
+    [id: number]: INSTRUCTION;
   };
 }
 
@@ -20,7 +24,22 @@ declare const EVD: {
 };
 
 declare class Scripter {
-  static MakeInstruction(_: EVENT, ...arg: any[]): unknown;
+  static MakeInstruction(
+    _: EVENT,
+    bank: number,
+    index: number,
+    replace: number | null,
+    args: any[]
+  ): INSTRUCTION;
+  static MakeInstruction(
+    _: EVENT,
+    bank: number,
+    index: number,
+    replace: number | null,
+    layer: number,
+    args: any[]
+  ): INSTRUCTION;
+
   static FillSkipPlaceholder(event: EVENT, index: number): unknown;
   static FillGotoPlaceholder(
     event: EVENT,
@@ -60,10 +79,32 @@ declare function InitializeEvent(
   id: number,
   ...args: number[]
 ): void;
-declare const CondAlways: ConditionType;
+declare const CondAlways: ConditionType & { Skip: Endfunc, Goto: GotoFunc, End: Endfunc };
 declare function Always(): Condition;
 declare function CondGroup(group: ConditionGroup): Condition;
 declare function CompiledConditionGroup(group: ConditionGroup): Condition;
+
+declare function Label0(): void;
+declare function Label1(): void;
+declare function Label2(): void;
+declare function Label3(): void;
+declare function Label4(): void;
+declare function Label5(): void;
+declare function Label6(): void;
+declare function Label7(): void;
+declare function Label8(): void;
+declare function Label9(): void;
+declare function Label10(): void;
+declare function Label11(): void;
+declare function Label12(): void;
+declare function Label13(): void;
+declare function Label14(): void;
+declare function Label15(): void;
+declare function Label16(): void;
+declare function Label17(): void;
+declare function Label18(): void;
+declare function Label19(): void;
+declare function Label20(): void;
 
 declare enum EventEndType {
   End,

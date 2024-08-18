@@ -3,11 +3,12 @@ declare const Restart: Behavior;
 declare const End: Behavior;
 declare const Default: Behavior;
 
-declare type Body = (...any: any[]) => void;
+declare type Body = (...any: EventParam[]) => void;
 declare type ONOFF = typeof ON | typeof OFF;
 
 declare function Event(id: number, behavior: Behavior, func: Body);
 declare function $Event(id: number, behavior: Behavior, func: Body);
+declare function JsEvent(id: number, behavior: Behavior, func: Body);
 declare function EndEvent();
 declare function RestartEvent();
 declare function RestartIf(cond: Condition);
@@ -25,15 +26,11 @@ declare function NamedLabel(str: string);
 declare const Else: undefined;
 declare const mainGroupAbuse: Condition;
 
-type Alternating<A, B> = [A, B, A?, B?, A?, B?, A?, B?, A?, B?];
+// prettier-ignore
+type Alternating<A, B> = [A, B, A?, B?, A?, B?, A?, B?, A?, B?, A?, B?, A?, B?, A?, B?, A?, B?, A?, B?, A?, B?, A?, B?, A?, B?, A?, B?, A?, B?, A?, B?, A?, B?, A?, B?, A?, B?, A?, B?, A?, B?, A?, B?, A?, B?, A?, B?, A?, B?];
 type IfArgs = Alternating<Condition, () => void>;
 
 declare function If(...args: IfArgs);
-
-declare class EventC {
-  constructor(id: number, behavior: Behavior, func: Body);
-  Initialize(slot: number, ...args: number[]);
-}
 
 declare class Condition {
   get Passed(): Condition;
@@ -58,32 +55,39 @@ declare class Comparable {
 }
 
 declare interface Number {
-  Eq(comp: Comparable | number): Condition;
-  NEq(comp: Comparable | number): Condition;
-  Gt(comp: Comparable | number): Condition;
-  GtE(comp: Comparable | number): Condition;
-  Lt(comp: Comparable | number): Condition;
-  LtE(comp: Comparable | number): Condition;
+  Eq(comp: Comparable): Condition;
+  NEq(comp: Comparable): Condition;
+  Gt(comp: Comparable): Condition;
+  GtE(comp: Comparable): Condition;
+  Lt(comp: Comparable): Condition;
+  LtE(comp: Comparable): Condition;
 }
 
-declare const L0: Label;
-declare const L1: Label;
-declare const L2: Label;
-declare const L3: Label;
-declare const L4: Label;
-declare const L5: Label;
-declare const L6: Label;
-declare const L7: Label;
-declare const L8: Label;
-declare const L9: Label;
-declare const L10: Label;
-declare const L11: Label;
-declare const L12: Label;
-declare const L13: Label;
-declare const L14: Label;
-declare const L15: Label;
-declare const L16: Label;
-declare const L17: Label;
-declare const L18: Label;
-declare const L19: Label;
-declare const L20: Label;
+declare type EventParam = string & { __tag: "EventParam" };
+declare type Arg<T> = T | EventParam;
+
+// Cheating a bit, this actually returns the string representations
+declare function X(startByte: number, byteCount: number): EventParam;
+
+declare function L(label: Label);
+declare const Label0: Label;
+declare const Label1: Label;
+declare const Label2: Label;
+declare const Label3: Label;
+declare const Label4: Label;
+declare const Label5: Label;
+declare const Label6: Label;
+declare const Label7: Label;
+declare const Label8: Label;
+declare const Label9: Label;
+declare const Label10: Label;
+declare const Label11: Label;
+declare const Label12: Label;
+declare const Label13: Label;
+declare const Label14: Label;
+declare const Label15: Label;
+declare const Label16: Label;
+declare const Label17: Label;
+declare const Label18: Label;
+declare const Label19: Label;
+declare const Label20: Label;

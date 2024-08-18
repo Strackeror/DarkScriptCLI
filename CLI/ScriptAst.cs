@@ -8,6 +8,7 @@ using System.Security.Cryptography;
 using Esprima;
 using System.Text.RegularExpressions;
 using Esprima.Ast;
+using Org.BouncyCastle.Tls.Crypto.Impl;
 
 namespace DarkScript3
 {
@@ -21,7 +22,7 @@ namespace DarkScript3
 #nullable enable
 
             public string Repr { get => $"X{startByte}_{byteCount}"; }
-            public (int, int) Bytes { get => (startByte, byteCount); }
+            public (int start, int count) Bytes { get => (startByte, byteCount); }
             public string Name { get; set; } = name;
             public bool Named = false;
 
@@ -184,16 +185,17 @@ namespace DarkScript3
                 HashSet<string> names = new();
                 foreach (var param in Params)
                 {
-                    while (!names.Add(param.Name))
-                    {
-                        param.Name += "_";
-                    }
+                    var name = param.Name;
+                    int index = 1;
+                    while (!names.Add(param.Name)) param.Name = $"{name}_{index++}";
                 }
-                var args = string.Join(", ", Params.Select(p => $"{p.Name} = \"{p.Repr}\""));
-                writer.WriteLine($"let event{ID} = new EventC({ID}, {RestBehavior}, function({args}) {{");
+                var args = string.Join(", ", Params.Select(p => $"{p.Name} = X({p.Bytes.start},{p.Bytes.count})"));
+                writer.WriteLine($$"""/** @typedef {{{ID}}} Event{{ID}} */""");
+                writer.WriteLine($"JsEvent({ID}, {RestBehavior}, function({args}) {{");
 
                 HashSet<string> variables = new();
-                void condVarInit(Cond cond)
+                HashSet<string> labels = new();
+                void prepassCond(Cond cond)
                 {
                     switch (cond)
                     {
@@ -201,34 +203,37 @@ namespace DarkScript3
                             variables.Add(condRef.Name);
                             break;
                         case OpCond opCond:
-                            opCond.Ops.ForEach(condVarInit);
+                            opCond.Ops.ForEach(prepassCond);
                             break;
 
                     }
                 }
-                void condVarStmts(List<Intermediate> statements)
+                void prepassStmts(List<Intermediate> statements)
                 {
                     foreach (var stmt in statements)
                     {
                         switch (stmt)
                         {
                             case IfElse ifElse:
-                                condVarStmts(ifElse.True);
-                                if (ifElse.False is not null) condVarStmts(ifElse.False);
+                                prepassStmts(ifElse.True);
+                                if (ifElse.False is not null) prepassStmts(ifElse.False);
                                 break;
                             case CondAssign assign:
                                 variables.Add(assign.ToVar);
+                                break;
+                            case Goto @goto:
+                                labels.Add(@goto.ToLabel);
                                 break;
                         }
 
                         if (stmt is CondIntermediate cond)
                         {
-                            condVarInit(cond.Cond);
+                            prepassCond(cond.Cond);
                         }
 
                     }
                 }
-                condVarStmts(Body);
+                prepassStmts(Body);
                 foreach (var variable in variables)
                 {
                     if (variable is "mainGroupAbuse") continue;
@@ -236,21 +241,17 @@ namespace DarkScript3
                 }
 
 
+                int? previousEvent = null;
                 void subprint(List<Intermediate> statements, int indentCount)
                 {
                     string indent = string.Join("", Enumerable.Repeat(SingleIndent, indentCount));
                     foreach (var stmt in statements)
                     {
-                        if (stmt is Instr instr && instr.Name == "InitializeEvent")
+
+                        if (stmt is IfElse ifElse)
                         {
-                            var id = instr.Args[1];
-                            var slot = instr.Args[0];
-                            var rest = instr.Args.Skip(2);
-                            writer.WriteLine($"{indent}event{id}.Initialize({slot}, {ArgString(rest.ToList(), null)})");
-                        }
-                        else if (stmt is IfElse ifElse)
-                        {
-                            writer.WriteLine($"{indent}If ({ifElse.Cond.ToJs()}, () => {{");
+                            writer.WriteLine($"{indent}If (");
+                            writer.WriteLine($"{indent}    {ifElse.Cond.ToJs()}, () => {{");
                             subprint(ifElse.True, indentCount + 2);
 
                             var cur = ifElse;
@@ -268,10 +269,20 @@ namespace DarkScript3
                                 writer.WriteLine($"{indent}    Else, () => {{");
                                 subprint(cur.False, indentCount + 2);
                             }
-                            writer.WriteLine($"{indent}}});");
+                            writer.WriteLine($"{indent}    }}");
+                            writer.WriteLine($"{indent});");
                         }
                         else
                         {
+                            if (stmt is Label label && !labels.Contains($"L{label.Num}"))
+                                continue;
+                            if (stmt is Instr instr && instr.Name is "InitializeEvent" or "InitializeCommonEvent")
+                            {
+                                var eventId = instr.Args[1] as int?;
+                                if (previousEvent != eventId)
+                                    writer.WriteLine($"{indent} /** @see Event{instr.Args[1]} */");
+                                previousEvent = eventId;
+                            }
                             writer.WriteLine($"{indent}{stmt.ToJs()}");
                         }
                     }
@@ -481,7 +492,7 @@ namespace DarkScript3
             public int Num { get; set; }
 
             public override string ToString() => $"L{Num}:";
-            public override string ToJs() => $"Label{Num}()";
+            public override string ToJs() => $"L({Num})";
         }
 
         public class JSStatement : Intermediate
@@ -643,8 +654,8 @@ namespace DarkScript3
                 : $"{(ToLabel == null ? (ToNode >= 0 ? $"GotoIfInternal({ToNode}" : $"SkipLinesIf({SkipLines}") : $"GotoIf({ToLabel}")}, {PlainCond});";
             public override string ToJs() => (SkipLines, Cond.Always) switch
             {
-                ( < 0, true) => $"Goto({ToLabel})",
-                ( < 0, false) => $"GotoIf({ToLabel}, {Cond.ToJs()})",
+                ( < 0, true) => $"Goto({ToLabel[1..]})",
+                ( < 0, false) => $"GotoIf({ToLabel[1..]}, {Cond.ToJs()})",
                 (_, true) => $"Skip({SkipLines})",
                 (_, false) => $"SkipIf({SkipLines}, {Cond.ToJs()})",
             };
@@ -750,6 +761,7 @@ namespace DarkScript3
                 var lhs = Lhs is null
                     ? $"{CmdLhs.ToJs()}"
                     : $"Op({Lhs})";
+
                 var op = Negate
                     ? JsOp(OppositeComparison[Type])
                     : JsOp(Type);

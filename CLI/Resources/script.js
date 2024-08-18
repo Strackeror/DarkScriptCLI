@@ -5,14 +5,21 @@ const Restart = REST.Restart;
 class EventContext {
   /** @type {number} */ nextSkipId = 0;
   /** @type {{[id: number | string]: number[]}} */ skips = {};
-  /** @type {number[]} */ labels = [];
+  /** @type {number[]} */ usedLabels = [];
+  /** @type {{[target: number]: {sources: number[]} | undefined}} */
+  virtualLabels = {};
   /** @type {EVENT} */ event;
   /** @type {number} */ orIndex = 1;
   /** @type {number} */ andIndex = 1;
+  /** @type {number | null} */ replaceInstruction = null;
 
   /** @param {EVENT} event  */
   constructor(event) {
     this.event = event;
+  }
+
+  get instructionIndex() {
+    return this.event.Instructions.Count;
   }
 }
 /** @type {EventContext[]} */
@@ -23,7 +30,7 @@ function _Event() {
   return _event;
 }
 
-/** @type {(id: number, restBehavior: number, instructions: (...args: any[]) => void) => EVENT} */
+/** @type {(id: number, restBehavior: number, instructions: () => void) => EVENT} */
 function CreateEvent(id, restBehavior, instructions) {
   let evt = new EVENT();
   evt.ID = id;
@@ -39,6 +46,19 @@ function CreateEvent(id, restBehavior, instructions) {
       `Reserved skips in Event ${id} have not been filled. Unfilled skips: ${unfilledSkips}`
     );
   }
+
+  for (let targetIndex in _Event().virtualLabels) {
+    let label = 0;
+    for (label = 0; _Event().usedLabels.includes(label); ++label);
+    if (+targetIndex < _Event().instructionIndex)
+      _Event().replaceInstruction = +targetIndex;
+    L(label);
+
+    for (let source of _Event().virtualLabels[targetIndex]?.sources ?? []) {
+      Scripter.FillGotoPlaceholder(_Event().event, source, label);
+      break;
+    }
+  }
   _eventStack.pop();
 
   EVD.Events.Add(evt);
@@ -51,12 +71,21 @@ function Event(id, restBehavior, body) {
   return CreateEvent(id, restBehavior, bodyWithArgs);
 }
 
+/** @type {(id: number, restBehavior: number, instructions: () => void) => EVENT} */
+function JsEvent(id, restBehavior, body) {
+  return CreateEvent(id, restBehavior, body);
+}
+
 /** @type {(func: (...any: any[]) => any) => string[]} */
 function _GetArgs(func) {
   var start = func.toString().indexOf("(");
   var end = func.toString().indexOf(")");
   var args = func.toString().substring(start + 1, end);
   return args.split(/\s*,\s*/).map((arg) => arg);
+}
+
+function _PlaceHolderInstruction() {
+  _Event().event.Instructions.Add(new INSTRUCTION());
 }
 
 /** @type {(bank: number, index: number, args: any[]) => unknown} */
@@ -72,6 +101,11 @@ function _Instruction(bank, index, args) {
       }
     }
 
+    let replace = _Event().replaceInstruction;
+    _Event().replaceInstruction = null;
+    if (replace === null && _Event().virtualLabels[_Event().instructionIndex]) {
+      _PlaceHolderInstruction();
+    }
     if (layer) {
       return Scripter.MakeInstruction(
         _Event().event,
@@ -85,6 +119,7 @@ function _Instruction(bank, index, args) {
         _Event().event,
         bank,
         index,
+        replace,
         hostArray(args)
       );
     }
@@ -101,7 +136,7 @@ function _ReserveNewSkip() {
 function _ReserveSkip(id) {
   id = id ?? _Event().nextSkipId++;
   if (!_Event().skips[id]) _Event().skips[id] = [];
-  _Event().skips[id].push(_Event().event.Instructions.Count);
+  _Event().skips[id].push(_Event().instructionIndex);
 }
 
 /** @type {(id: string | number) => void} */
@@ -123,11 +158,12 @@ function hostArray(args) {
   return argOut;
 }
 
-// function $LAYERS(...args) {
-//   var layer = 0;
-//   for (var i = 0; i < args.length; i++) layer |= 1 << args[i];
-//   return { layerValue: layer };
-// }
+/** @type {(...layers: number[]) => {layerValue: number}} */
+function $LAYERS(...args) {
+  var layer = 0;
+  for (var i = 0; i < args.length; i++) layer |= 1 << args[i];
+  return { layerValue: layer };
+}
 
 /** @type {(num: number) => number} */
 function floatArg(num) {
@@ -139,37 +175,48 @@ function bytesArg(...nums) {
   return nums[0] + (nums[1] << 8) + (nums[2] << 16) + (nums[3] << 24);
 }
 
-/** @type {EventC[]} */
-var eventCs = [];
-
-class EventC {
-  /**
-   * @param {number} id
-   * @param {number} restBehavior
-   * @param {(...args: number[]) => void} body
-   */
-  constructor(id, restBehavior, body) {
-    this.id = id;
-    this.behavior = restBehavior;
-    this.body = body;
-    eventCs.push(this);
-  }
-
-  Event() {
-    CreateEvent(this.id, this.behavior, this.body);
-  }
-
-  /**
-   * @param {number} slot
-   * @param {number[]} args;
-   */
-  Initialize(slot, ...args) {
-    InitializeEvent(slot, this.id, ...args);
-  }
+/** @type {(start: number, count: number) => string} */
+function X(start, count) {
+  return `X${start}_${count}`;
 }
 
-function LoadAllEvents() {
-  for (let eventC of eventCs) {
-    eventC.Event();
+/** @param {number} id */
+function LabelCall(id) {
+  [
+    Label0,
+    Label1,
+    Label2,
+    Label3,
+    Label4,
+    Label5,
+    Label6,
+    Label7,
+    Label8,
+    Label9,
+    Label10,
+    Label11,
+    Label12,
+    Label13,
+    Label14,
+    Label15,
+    Label16,
+    Label17,
+    Label18,
+    Label19,
+    Label20,
+  ][id]();
+}
+
+/** @param {number} id */
+function L(id) {
+  let index = _Event().event.Instructions.Count;
+  let virtualLabels = _Event().virtualLabels[index];
+  if (virtualLabels) {
+    for (let source of virtualLabels.sources) {
+      Scripter.FillGotoPlaceholder(_Event().event, source, id);
+    }
+    delete _Event().virtualLabels[index];
   }
+  _Event().usedLabels.push(id);
+  LabelCall(id);
 }

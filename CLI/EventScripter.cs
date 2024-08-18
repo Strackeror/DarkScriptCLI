@@ -32,7 +32,15 @@ namespace DarkScript3
 
         public EMELD ELD = new EMELD();
 
+#if DEBUG
+        private V8ScriptEngine v8 = new V8ScriptEngine(
+            V8ScriptEngineFlags.EnableRemoteDebugging
+            | V8ScriptEngineFlags.EnableDebugging
+            //| V8ScriptEngineFlags.AwaitDebuggerAndPauseOnStart
+        );
+#else
         private V8ScriptEngine v8 = new V8ScriptEngine();
+#endif
 
         // These are accessed from JS, in code below.
         // Also used for automatic skip amount calculation
@@ -66,7 +74,7 @@ namespace DarkScript3
         /// <summary>
         /// Called by JS to add instructions to the event currently being edited.
         /// </summary>
-        public Instruction MakeInstruction(Event evt, int bank, int index, object[] args)
+        public Instruction MakeInstruction(Event evt, int bank, int index, int? at, object[] args)
         {
             CurrentEventID = (int)evt.ID;
             // TODO: Why is this done at the start? Nothing seems to use it, at least.
@@ -101,7 +109,7 @@ namespace DarkScript3
                         var (sourceStartByte, length) = param.Bytes;
                         int targetStartByte = docs.FuncBytePositions[doc][i];
 
-                        Parameter p = new Parameter(evt.Instructions.Count, targetStartByte, sourceStartByte, length);
+                        Parameter p = new Parameter(at ?? evt.Instructions.Count, targetStartByte, sourceStartByte, length);
                         evt.Parameters.Add(p);
                         evt.Parameters = evt.Parameters.OrderBy(prm => prm.SourceStartByte).ToList();
 
@@ -134,7 +142,10 @@ namespace DarkScript3
                     }
                 }
                 Instruction ins = new Instruction(bank, index, properArgs);
-                evt.Instructions.Add(ins);
+                if (at is not null && at < evt.Instructions.Count)
+                    evt.Instructions[at.Value] = ins;
+                else
+                    evt.Instructions.Add(ins);
                 CurrentEventID = -1;
                 CurrentInsIndex = -1;
                 return ins;
@@ -192,9 +203,9 @@ namespace DarkScript3
         /// <summary>
         /// Called by JS to add instructions to the event currently being edited.
         /// </summary>
-        public Instruction MakeInstruction(Event evt, int bank, int index, uint layer, object[] args)
+        public Instruction MakeInstruction(Event evt, int bank, int index, int? at, uint layer, object[] args)
         {
-            Instruction ins = MakeInstruction(evt, bank, index, args);
+            Instruction ins = MakeInstruction(evt, bank, index, at, args);
             ins.Layer = layer;
             return ins;
         }
@@ -228,7 +239,7 @@ namespace DarkScript3
             File.WriteAllText(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location) + "\\script.generated.js", code);
 #endif
             try
-            {   
+            {
                 v8.Execute("script.generated.js", code.ToString());
             }
             catch (Exception ex) when (ex is IScriptEngineException scriptException)
@@ -257,7 +268,6 @@ namespace DarkScript3
             {
                 DocumentInfo docInfo = new DocumentInfo(documentName) { Category = ModuleCategory.Standard };
                 v8.Execute(docInfo, code);
-                v8.Execute("LoadAllEvents();");
             }
             catch (Exception ex) when (ex is IScriptEngineException scriptException)
             {

@@ -140,7 +140,7 @@ namespace DarkScript3
 
                         foreach (var (arg, argDoc) in instr.Args.Zip(doc.Arguments))
                         {
-                            if (arg is ParamArg paramArg && !paramArg.Param.Named)
+                            if (arg is ParamArg paramArg && !paramArg.Param.Named && !argDoc.DisplayName.ToLower().EndsWith("handside"))
                             {
                                 paramArg.Param.Name = argDoc.DisplayName;
                                 paramArg.Param.Named = true;

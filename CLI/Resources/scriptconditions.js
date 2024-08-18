@@ -2,7 +2,7 @@ class ConditionType {
   /**
    * @param {IfFunc | undefined} cond
    * @param {SkipFunc | undefined} skip
-   * @param {Endfunc} end
+   * @param {Endfunc | undefined} end
    * @param {GotoFunc | undefined} goto
    * @param {WaitFunc | undefined} wait
    */
@@ -11,7 +11,7 @@ class ConditionType {
     this.If = cond;
     /** @type {SkipFunc | undefined} */
     this.Skip = skip;
-    /** @type {Endfunc} */
+    /** @type {Endfunc | undefined} */
     this.End = end;
     /** @type {GotoFunc | undefined} */
     this.Goto = goto;
@@ -138,6 +138,7 @@ class Condition {
 class Unconditional extends Condition {
   constructor() {
     super(CondAlways);
+    CondAlways.If = () => {};
   }
 
   Not() {
@@ -334,6 +335,36 @@ function Not(cond) {
   return cond.Not();
 }
 
+/** @type {(cond: Condition) => [Condition, number]} */
+function VirtualGotoIf(cond) {
+  if (cond.type.Skip || cond.type.Goto) {
+    Skip(0);
+    let index = _Event().instructionIndex - 1;
+    return [cond, index];
+  } else if (cond.type.If) return VirtualGotoIf(cond.Get());
+  else throw new Error("Can't virtual goto for condition");
+}
+
+/** @param {[Condition, number][]} sources */
+function VirtualLabel(sources) {
+  let currentIndex = _Event().instructionIndex;
+  let gotos = [];
+  for (let [cond, index] of sources) {
+    _Event().replaceInstruction = index;
+    if (currentIndex - index < 100) {
+      SkipIf(currentIndex - index - 1, cond);
+    } else {
+      GotoIf(99, cond);
+      gotos.push(index);
+    }
+  }
+  if (!gotos.length) return;
+  if (!_Event().virtualLabels[currentIndex]) {
+    _Event().virtualLabels[currentIndex] = { sources: [] };
+  }
+  _Event().virtualLabels[currentIndex]?.sources.push(...gotos);
+}
+
 var Else = undefined;
 /** @type {(...args: [Condition, () => void, ...any[]]) => void} */
 function If(...args) {
@@ -344,7 +375,7 @@ function If(...args) {
   /** @type {any[]} */
   let rest = args;
 
-  let endId = _Event().nextSkipId++;
+  let gotos = [];
   while (rest.length >= 2) {
     [condition, body, ...rest] = rest;
 
@@ -353,37 +384,11 @@ function If(...args) {
       break;
     }
 
-    let id = _Event().nextSkipId++;
-    SkipToIf(id, Not(condition));
+    let virtualCond = VirtualGotoIf(Not(condition));
     body();
-    if (rest.length > 0) SkipToIf(endId, Always());
-    _FillSkip(id);
+    if (rest.length > 0) gotos.push(VirtualGotoIf(Always()));
+    VirtualLabel([virtualCond]);
   }
-
-  if (rest.length > 0) {
-    throw new Error("Invalid If condition");
-  }
-  _FillSkip(endId);
+  if (gotos) VirtualLabel(gotos);
+  if (rest.length > 0) throw new Error("Invalid If condition");
 }
-
-const L0 = 0;
-const L1 = 1;
-const L2 = 2;
-const L3 = 3;
-const L4 = 4;
-const L5 = 5;
-const L6 = 6;
-const L7 = 7;
-const L8 = 8;
-const L9 = 9;
-const L10 = 10;
-const L11 = 11;
-const L12 = 12;
-const L13 = 13;
-const L14 = 14;
-const L15 = 15;
-const L16 = 16;
-const L17 = 17;
-const L18 = 18;
-const L19 = 19;
-const L20 = 20;
