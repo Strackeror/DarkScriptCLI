@@ -190,7 +190,7 @@ namespace DarkScript3
                     while (!names.Add(param.Name)) param.Name = $"{name}_{index++}";
                 }
                 var args = string.Join(", ", Params.Select(p => $"{p.Name} = X({p.Bytes.start},{p.Bytes.count})"));
-                writer.WriteLine($$"""/** @typedef {{{ID}}} Event{{ID}} */""");
+                if (ID is not 0 or 50) writer.WriteLine($$"""/** @typedef {{{ID}}} Event{{ID}} */""");
                 writer.WriteLine($"JsEvent({ID}, {RestBehavior}, function({args}) {{");
 
                 HashSet<string> variables = new();

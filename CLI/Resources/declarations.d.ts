@@ -21,7 +21,7 @@ declare function SkipTo(label: string);
 declare function SkipToIf(label: string, cond: Condition);
 declare function WaitFor(cond: Condition);
 declare function NoOp();
-declare function NamedLabel(str: string);
+declare function SkipLabel(str: string);
 
 declare const Else: undefined;
 declare const mainGroupAbuse: Condition;
@@ -46,12 +46,12 @@ declare function Not(cond: Condition): Condition;
 declare function Get(cond: Condition): Condition;
 
 declare class Comparable {
-  Eq(comp: Comparable | number): Condition;
-  NEq(comp: Comparable | number): Condition;
-  Gt(comp: Comparable | number): Condition;
-  GtE(comp: Comparable | number): Condition;
-  Lt(comp: Comparable | number): Condition;
-  LtE(comp: Comparable | number): Condition;
+  Eq(comp: EventParam | number): Condition;
+  NEq(comp: EventParam | number): Condition;
+  Gt(comp: EventParam | number): Condition;
+  GtE(comp: EventParam | number): Condition;
+  Lt(comp: EventParam | number): Condition;
+  LtE(comp: EventParam | number): Condition;
 }
 
 declare interface Number {
@@ -69,25 +69,5 @@ declare type Arg<T> = T | EventParam;
 // Cheating a bit, this actually returns the string representations
 declare function X(startByte: number, byteCount: number): EventParam;
 
+// Goto Label declaration shorthand
 declare function L(label: Label);
-declare const Label0: Label;
-declare const Label1: Label;
-declare const Label2: Label;
-declare const Label3: Label;
-declare const Label4: Label;
-declare const Label5: Label;
-declare const Label6: Label;
-declare const Label7: Label;
-declare const Label8: Label;
-declare const Label9: Label;
-declare const Label10: Label;
-declare const Label11: Label;
-declare const Label12: Label;
-declare const Label13: Label;
-declare const Label14: Label;
-declare const Label15: Label;
-declare const Label16: Label;
-declare const Label17: Label;
-declare const Label18: Label;
-declare const Label19: Label;
-declare const Label20: Label;
