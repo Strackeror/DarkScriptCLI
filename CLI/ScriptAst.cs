@@ -247,7 +247,9 @@ namespace DarkScript3
                     string indent = string.Join("", Enumerable.Repeat(SingleIndent, indentCount));
                     foreach (var stmt in statements)
                     {
-
+                        foreach (var label in stmt.Labels)
+                            if (labels.Contains(label))
+                                writer.WriteLine($"{indent}SkipLabel(\"{label}\")");
                         if (stmt is IfElse ifElse)
                         {
                             writer.WriteLine($"{indent}If (");
@@ -656,8 +658,8 @@ namespace DarkScript3
             {
                 ( < 0, true) => $"Goto({ToLabel[1..]})",
                 ( < 0, false) => $"GotoIf({ToLabel[1..]}, {Cond.ToJs()})",
-                (_, true) => $"Skip({SkipLines})",
-                (_, false) => $"SkipIf({SkipLines}, {Cond.ToJs()})",
+                (_, true) => $"SkipTo(\"{ToLabel}\")",
+                (_, false) => $"SkipToIf(\"{ToLabel}\", {Cond.ToJs()})",
             };
 
             public override StringTree GetStringTree() => Cond.Always

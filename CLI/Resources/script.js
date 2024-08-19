@@ -136,7 +136,7 @@ function _ReserveNewSkip() {
 function _ReserveSkip(id) {
   id = id ?? _Event().nextSkipId++;
   if (!_Event().skips[id]) _Event().skips[id] = [];
-  _Event().skips[id].push(_Event().instructionIndex);
+  _Event().skips[id].push(_Event().instructionIndex - 1);
 }
 
 /** @type {(id: string | number) => void} */
