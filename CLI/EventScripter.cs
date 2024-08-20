@@ -266,6 +266,7 @@ namespace DarkScript3
             v8.DocumentSettings.Loader.DiscardCachedDocuments();
             try
             {
+                v8.DocumentSettings.SearchPath = Path.GetFullPath(Path.GetDirectoryName(documentName));
                 DocumentInfo docInfo = new DocumentInfo(documentName) { Category = ModuleCategory.Standard };
                 v8.Execute(docInfo, code);
             }

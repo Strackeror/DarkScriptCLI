@@ -857,7 +857,7 @@ namespace DarkScript3
                 {
                     context.Error(func.Body, $"Event function body should be a {{ bunch of statements }}, found {func.Body.Type}");
                 }
-                if (func.Generator || func.Async || func.Strict)
+                if (func.Generator || func.Async)
                 {
                     context.Error(func, "Event function shouldn't have extra annotations, but found generator/async/strict");
                 }
@@ -909,7 +909,7 @@ namespace DarkScript3
             try
             {
                 JavaScriptParser parser = new JavaScriptParser(new ParserOptions { });
-                program = parser.ParseScript(code, strict: false);
+                program = parser.ParseModule(code);
                 // "ERROR: <message>\n{line}:{col}: line"
             }
             catch (ParserException ex)
