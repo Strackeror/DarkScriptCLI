@@ -296,7 +296,7 @@ function Goto(target) {
 function SkipToIf(target, cond) {
   if (cond.type.Skip) {
     cond.type.Skip(99, ...cond.args);
-    _ReserveSkip(target);
+    _ReservedSkip(target);
   } else if (cond.type.If) SkipToIf(target, cond.Get());
   else throw new Error("Can't skip for condition");
 }

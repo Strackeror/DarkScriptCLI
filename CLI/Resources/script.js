@@ -132,9 +132,16 @@ function _ReserveNewSkip() {
   _ReserveSkip(id);
   return id;
 }
-/** @type {(id: string | number) => void} */
+
+/** @type {(id: string | number) => number} */
 function _ReserveSkip(id) {
-  id = id ?? _Event().nextSkipId++;
+  if (!_Event().skips[id]) _Event().skips[id] = [];
+  _Event().skips[id].push(_Event().instructionIndex);
+  return 99;
+}
+
+/** @type {(id: string | number) => void} */
+function _ReservedSkip(id) {
   if (!_Event().skips[id]) _Event().skips[id] = [];
   _Event().skips[id].push(_Event().instructionIndex - 1);
 }

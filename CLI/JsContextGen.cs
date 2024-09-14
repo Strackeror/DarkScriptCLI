@@ -342,7 +342,7 @@ public static class JsContextGen
                  function {{name}}({{Join(args, a => a.JsArg(), ", ")}}) {
                      Scripter.CurrentInsName = "{{name}}";
                      for (let arg of [{{Join(args, a => a.name, ", ")}}]) {
-                         if (arg == void 0) throw `!!! Argument ${arg} in instruction "{{name}}" is undefined or missing.`
+                         if (arg == void 0) throw new Error(`!!! Argument ${arg} in instruction "{{name}}" is undefined or missing.`)
                      }
                      var ins = _Instruction({{cls.Index}}, {{instr.Index}}, [{{Join(args, a => a.CallArg(), ", ")}}]);
                      Scripter.CurrentInsName = "";
